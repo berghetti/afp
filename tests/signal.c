@@ -1,12 +1,15 @@
 
-#define _GNU_SOUCE     // to gettid
-#include <immintrin.h> // rdtsc
+// Single test overhead between send signal and get signal handler
+
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "cycles_count.h"
 
 #define RUNS 100000UL
 
@@ -21,7 +24,7 @@ static uint32_t samples[RUNS];
 static void
 handler (int sig, siginfo_t *info, void *ucontext)
 {
-  uint64_t t = __rdtsc () - ts;
+  uint32_t t = rdtsc_end () - ts;
 
   samples[i++] = t;
 }
@@ -74,7 +77,7 @@ f1 (void)
   uint64_t i = RUNS;
   while (i--)
     {
-      ts = __rdtsc ();
+      ts = rdtsc_start ();
       raise (SIGUSR1);
     }
 
@@ -90,7 +93,7 @@ f2 (void)
   uint64_t i = RUNS;
   while (i--)
     {
-      ts = __rdtsc ();
+      ts = rdtsc_start ();
       kill (pid, SIGUSR1);
     }
 
@@ -107,7 +110,7 @@ f3 (void)
   uint64_t i = RUNS;
   while (i--)
     {
-      ts = __rdtsc ();
+      ts = rdtsc_start ();
       sigqueue (pid, SIGUSR1, sv);
     }
 
@@ -124,7 +127,7 @@ f4 (void)
   uint64_t i = RUNS;
   while (i--)
     {
-      ts = __rdtsc ();
+      ts = rdtsc_start ();
       tgkill (tgid, tid, SIGUSR1);
     }
 
@@ -134,7 +137,10 @@ f4 (void)
 int
 main (int argc, char **argv)
 {
-  struct sigaction act = { .sa_sigaction = handler, .sa_flags = SA_SIGINFO };
+  sigset_t sg;
+  sigfillset (&sg);
+  struct sigaction act
+      = { .sa_sigaction = handler, .sa_mask = sg, .sa_flags = SA_SIGINFO };
   sigaction (SIGUSR1, &act, NULL);
 
   printf ("Runs %lu\n", RUNS);
