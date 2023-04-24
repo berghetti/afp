@@ -22,10 +22,10 @@ rdtsc_end (void)
 {
   uint32_t hi, low;
   asm volatile ("rdtscp\n\t"
-                "mov %%edx, %0\n\t"
-                "mov %%eax, %1\n\t"
+                "mov %%eax, %0\n\t"
+                "mov %%edx, %1\n\t"
                 "cpuid\n\t"
-                : "=r"(hi), "=r"(low)
+                : "=r"(low), "=r"(hi)
                 :
                 : "rax", "rdx", "rbx", "rcx");
 
