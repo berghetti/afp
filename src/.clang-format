@@ -1,0 +1,25 @@
+# clang-format version 11.0.1
+
+Language: Cpp
+BasedOnStyle: GNU
+AccessModifierOffset: -2
+AlignEscapedNewlines: Left
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+AllowShortFunctionsOnASingleLine: All
+AlwaysBreakAfterReturnType: All
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: None
+IndentWidth: 2
+IndentCaseLabels: true
+ColumnLimit: 80
+ContinuationIndentWidth: 8
+SpaceAfterCStyleCast: true
+SpacesInParentheses: true
+SpacesInCStyleCastParentheses: true
+SpacesBeforeTrailingComments: 2
+SortIncludes: false
+...

@@ -1,0 +1,7 @@
+meson
+ninja-build
+python3-pyelftools
+pkg-config
+rdma-core
+
+libibverbs-dev

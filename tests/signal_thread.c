@@ -80,8 +80,8 @@ f1 (void *arg)
 
   cpu_set_t cpuset;
   CPU_ZERO (&cpuset);
-  CPU_SET (id + 11, &cpuset); // match my home pc isolcpu
-  pthread_setaffinity_np (pthread_self (), sizeof (cpu_set_t), &cpuset);
+  CPU_SET (id, &cpuset); // match my home pc isolcpu
+  //pthread_setaffinity_np (pthread_self (), sizeof (cpu_set_t), &cpuset);
 
   pid_t tgid = getpid ();
   pid_t tid = gettid ();
