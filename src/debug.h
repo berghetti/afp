@@ -16,30 +16,40 @@
 void
 print ( const char *, ... );
 
-#define INFO( fmt, ... )                               \
-  do                                                   \
-    {                                                  \
-      fprintf ( stderr, _INFO fmt "\n", __VA_ARGS__ ); \
-    }                                                  \
+#define INFO( fmt, ... )                          \
+  do                                              \
+    {                                             \
+      fprintf ( stderr, _INFO fmt, __VA_ARGS__ ); \
+    }                                             \
   while ( 0 )
 
-#define ERROR( fmt, ... )                               \
-  do                                                    \
-    {                                                   \
-      fprintf ( stderr, _ERROR fmt "\n", __VA_ARGS__ ); \
-      exit ( EXIT_FAILURE );                            \
-    }                                                   \
+#define ERROR( fmt, ... )                          \
+  do                                               \
+    {                                              \
+      fprintf ( stderr, _ERROR fmt, __VA_ARGS__ ); \
+      exit ( EXIT_FAILURE );                       \
+    }                                              \
   while ( 0 )
 
 #ifdef NDEBUG
 #define DEBUG( fmt, ... )
+#define DEBUG_ARRAY( a, size )
 #else
-#define DEBUG( fmt, ... )                                                    \
-  do                                                                         \
-    {                                                                        \
-      print ( _DEBUG "%s:%d - " fmt "\n", __FILE__, __LINE__, __VA_ARGS__ ); \
-    }                                                                        \
+#define DEBUG( fmt, ... )                                               \
+  do                                                                    \
+    {                                                                   \
+      print ( _DEBUG "%s:%d - " fmt, __FILE__, __LINE__, __VA_ARGS__ ); \
+    }                                                                   \
   while ( 0 )
+
+#define DEBUG_ARRAY( a, size )                   \
+  ( {                                            \
+    for ( int i = 0; i < ( int ) ( size ); ++i ) \
+      {                                          \
+        fprintf ( stderr, "%#x ", a[i] );        \
+      }                                          \
+    putchar ( '\n' );                            \
+  } )
 #endif
 
 #endif  // ERROR_H

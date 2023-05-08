@@ -13,11 +13,15 @@
 #include "debug.h"
 
 static const struct rte_eth_conf conf = {
-  .rxmode = { .mq_mode = RTE_ETH_MQ_RX_RSS },
+  .rxmode = { .mq_mode = RTE_ETH_MQ_RX_RSS,
+              .offloads = RTE_ETH_RX_OFFLOAD_IPV4_CKSUM |
+                          RTE_ETH_RX_OFFLOAD_UDP_CKSUM },
   .rx_adv_conf = { .rss_conf = { .rss_hf = RTE_ETH_RSS_IPV4 |
                                            /*RTE_ETH_RSS_NONFRAG_IPV4_TCP | */
                                            RTE_ETH_RSS_NONFRAG_IPV4_UDP } },
-  .txmode = { .mq_mode = RTE_ETH_MQ_TX_NONE },
+  .txmode = { .offloads = RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+                          RTE_ETH_TX_OFFLOAD_UDP_CKSUM,
+              .mq_mode = RTE_ETH_MQ_TX_NONE },
 };
 
 #define QUEUE_SIZE 4096U
@@ -34,7 +38,7 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
   int ret;
   ret = rte_eth_dev_configure ( port_id, rx_queues, tx_queues, &conf );
   if ( ret != 0 )
-    rte_exit ( EXIT_FAILURE, "Error config port id 0" );
+    ERROR ( "%s", "Error config port id 0\n" );
 
   uint16_t nb_rx = QUEUE_SIZE;
   uint16_t nb_tx = QUEUE_SIZE;
@@ -43,9 +47,16 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
   if ( ret != 0 )
     rte_exit ( EXIT_FAILURE, "Error set queue size" );
 
-  /* Allocate and set up QUEUE_COUNT RX/TX queue per Ethernet port. */
-  // TODO: check prefetch on functions below
   int numa_id = rte_eth_dev_socket_id ( port_id );
+
+  struct rte_eth_dev_info dev_info;
+  rte_eth_dev_info_get ( 0, &dev_info );
+
+  /* Allocate and set up QUEUE_COUNT RX/TX queue per Ethernet port. */
+
+  struct rte_eth_rxconf *rxconf = &dev_info.default_rxconf;
+  rxconf->offloads =
+          RTE_ETH_RX_OFFLOAD_IPV4_CKSUM | RTE_ETH_RX_OFFLOAD_UDP_CKSUM;
   uint16_t q;
   for ( q = 0; q < rx_queues; q++ )
     {
@@ -53,15 +64,19 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
                                      q,
                                      nb_rx,
                                      numa_id,
-                                     NULL,
+                                     rxconf,
                                      mbuf_pool );
       if ( ret != 0 )
         rte_exit ( EXIT_FAILURE, "Error allocate RX queue" );
     }
 
+  struct rte_eth_txconf *txconf = &dev_info.default_txconf;
+  txconf->offloads =
+          RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+
   for ( q = 0; q < tx_queues; q++ )
     {
-      ret = rte_eth_tx_queue_setup ( port_id, q, nb_tx, numa_id, NULL );
+      ret = rte_eth_tx_queue_setup ( port_id, q, nb_tx, numa_id, txconf );
       if ( ret != 0 )
         rte_exit ( EXIT_FAILURE, "Error allocate TX queue\n" );
     }
@@ -77,11 +92,11 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
     rte_exit ( EXIT_FAILURE, "Error get mac address" );
 
   INFO ( "Using port with MAC: %02" PRIx8 ":%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8
-         ":%02" PRIx8 ":%02" PRIx8,
+         ":%02" PRIx8 ":%02" PRIx8 "\n",
          RTE_ETHER_ADDR_BYTES ( &addr ) );
 }
 
-void
+struct rte_mempool *
 dpdk_init ( int num_queues )
 {
   struct rte_mempool *mbuf_pool;
@@ -99,4 +114,6 @@ dpdk_init ( int num_queues )
             rte_strerror ( rte_errno ) );
 
   port_init ( 0, num_queues, mbuf_pool );
+
+  return mbuf_pool;
 }
