@@ -27,6 +27,13 @@ print ( const char *, ... );
   do                                               \
     {                                              \
       fprintf ( stderr, _ERROR fmt, __VA_ARGS__ ); \
+    }                                              \
+  while ( 0 )
+
+#define FATAL( fmt, ... )                          \
+  do                                               \
+    {                                              \
+      fprintf ( stderr, _FATAL fmt, __VA_ARGS__ ); \
       exit ( EXIT_FAILURE );                       \
     }                                              \
   while ( 0 )

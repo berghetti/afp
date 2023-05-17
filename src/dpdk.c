@@ -97,7 +97,7 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
 }
 
 struct rte_mempool *
-dpdk_init ( int num_queues )
+dpdk_init ( uint16_t port_id, uint16_t num_queues )
 {
   struct rte_mempool *mbuf_pool;
 
@@ -113,7 +113,7 @@ dpdk_init ( int num_queues )
             rte_socket_id (),
             rte_strerror ( rte_errno ) );
 
-  port_init ( 0, num_queues, mbuf_pool );
+  port_init ( port_id, num_queues, mbuf_pool );
 
   return mbuf_pool;
 }
