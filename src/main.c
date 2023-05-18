@@ -1,5 +1,6 @@
 
 #include <errno.h>
+#include <generic/rte_cycles.h>
 #include <rte_errno.h>
 #include <rte_ethdev.h>
 #include <rte_ether.h>
@@ -29,6 +30,7 @@
 #include "queue.h"
 
 #include <unistd.h>
+
 #define MAX_WORKERS 32
 
 static struct config conf = { .port_id = 0 };
@@ -46,7 +48,6 @@ app ( afp_ctx_t *ctx, void *arg )
   uint16_t len;
   struct sock sock;
 
-  sleep ( 1 );
   while ( 1 )
     {
       if ( afp_recv ( ctx, &data, &len, &sock ) )
@@ -54,7 +55,7 @@ app ( afp_ctx_t *ctx, void *arg )
           // DEBUG ( "App received packet with size %u\n", len );
           // DEBUG ( "%s\n", ( char * ) data );
           //
-          usleep ( 800 );
+          rte_delay_us ( 500 );
 
           char buff[] = "Hi DPDK!\n";
           afp_send ( ctx, buff, sizeof ( buff ), &sock );
@@ -91,13 +92,12 @@ worker ( void *arg )
 static void
 dataplane ( struct config *conf )
 {
-  uint16_t port = 0;
-  if ( rte_eth_dev_socket_id ( port ) >= 0 &&
-       rte_eth_dev_socket_id ( port ) != ( int ) rte_socket_id () )
-    INFO ( "WARNING, port %u is on remote NUMA node to "
-           "polling thread.\n\tPerformance will "
-           "not be optimal.\n",
-           port );
+  if ( rte_eth_dev_socket_id ( conf->port_id ) >= 0 &&
+       rte_eth_dev_socket_id ( conf->port_id ) != ( int ) rte_socket_id () )
+    WARNING ( "port %u is on remote NUMA node to "
+              "polling thread.\n\tPerformance will "
+              "not be optimal.\n",
+              conf->port_id );
 
   unsigned int core_id;
   uint16_t worker_id = 0;
@@ -110,6 +110,40 @@ dataplane ( struct config *conf )
               core_id,
               rte_strerror ( rte_errno ) );
   }
+}
+
+// this functions run code of timer core.
+// Now timer core is the mais DPDK core
+static void
+core_timer ( void )
+{
+  // setup timer
+  struct sigaction sa = { .sa_sigaction = timer_handler,
+                          .sa_flags = SA_SIGINFO };
+  struct itimerval timer;
+
+  // Install timer_handler as the signal handler for SIGVTALRM
+  if ( sigaction ( SIGPROF, &sa, NULL ) == -1 )
+    {
+      perror ( "sigaction" );
+      exit ( 1 );
+    }
+
+  // Configure the timer to expire after 1 second
+  timer.it_value.tv_sec = 1;
+  timer.it_value.tv_usec = 0;
+  timer.it_interval.tv_sec = 1;
+  timer.it_interval.tv_usec = 0;
+
+  // Start the timer
+  if ( setitimer ( ITIMER_PROF, &timer, NULL ) == -1 )
+    {
+      perror ( "setitimer" );
+      exit ( 1 );
+    }
+
+  while ( 1 )
+    ;
 }
 
 // initialize hardware queues indexes
@@ -147,7 +181,8 @@ main ( int argc, char **argv )
   afp_netio_init ( &conf );
   dataplane ( &conf );
 
-  DEBUG ( "%s\n", "here" );
+  DEBUG ( "%s\n", "Main core going to timer function" );
+  core_timer ();
 
   /* clean up the EAL */
   rte_eal_cleanup ();

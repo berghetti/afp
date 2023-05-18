@@ -103,7 +103,9 @@ queue_dequeue ( struct queue *q )
 }
 
 static inline void
-queue_stealing ( struct queue *dst, struct queue *src, uint32_t size )
+queue_stealing ( struct queue *restrict dst,
+                 struct queue *restrict src,
+                 uint32_t size )
 {
   while ( size-- )
     dst->data[dst->head++ & MASK] = src->data[src->tail++ & MASK];

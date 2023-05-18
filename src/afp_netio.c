@@ -1,4 +1,6 @@
 
+#include <generic/rte_cycles.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <generic/rte_spinlock.h>
 #include <netinet/in.h>
@@ -8,8 +10,6 @@
 #include <rte_lcore.h>
 #include <rte_mbuf_core.h>
 #include <rte_udp.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <rte_cman.h>
 #include <rte_compat.h>
 #include <rte_log.h>
@@ -30,7 +30,8 @@
 #include <rte_byteorder.h>
 #include <rte_mempool.h>
 #include <rte_ring.h>
-#include <stdint.h>
+#include <rte_debug.h>
+#include <rte_atomic.h>
 
 #include "dpdk.h"
 #include "afp_netio.h"
@@ -67,13 +68,13 @@ parse_pkt ( struct rte_mbuf *pkt, void **payload, uint16_t *payload_size )
   eth = rte_pktmbuf_mtod ( pkt, struct rte_ether_hdr * );
   if ( !rte_is_same_ether_addr ( &eth->dst_addr, &my_ether ) )
     {
-      DEBUG ( "%s\n", "here" );
+      DEBUG ( "%s\n", "Not for me" );
       return -1;
     }
 
   if ( eth->ether_type != rte_cpu_to_be_16 ( RTE_ETHER_TYPE_IPV4 ) )
     {
-      DEBUG ( "%s\n", "here" );
+      DEBUG ( "%s\n", "Not IPv4" );
       return -1;
     }
 
@@ -83,7 +84,7 @@ parse_pkt ( struct rte_mbuf *pkt, void **payload, uint16_t *payload_size )
 
   if ( ( ip->next_proto_id != IPPROTO_UDP ) )
     {
-      DEBUG ( "%s\n", "here" );
+      DEBUG ( "%s\n", "Not UDP" );
       return -1;
     }
 
@@ -99,7 +100,14 @@ parse_pkt ( struct rte_mbuf *pkt, void **payload, uint16_t *payload_size )
   return 0;
 }
 
-static int
+/*
+ * div_up - divides two numbers, rounding up to an integer
+ * @x: the dividend
+ */
+#define div_up( x, d ) ( ( ( ( x ) + ( d ) -1 ) ) / ( d ) )
+
+// retorn amount work stolen
+static uint32_t
 work_stealing ( struct queue *my, struct queue *remote )
 {
   if ( !queue_trylock ( remote ) )
@@ -107,17 +115,16 @@ work_stealing ( struct queue *my, struct queue *remote )
 
   uint32_t size = queue_count ( remote );
 
-  if ( size <= 1 )
-    return 0;
+  if ( size )
+    {
+      size = div_up ( size, 2 );
 
-  size /= 2;
-
-  DEBUG ( "Stealing %u packets\n", size );
-  queue_stealing ( my, remote, size );
+      DEBUG ( "Stealing %u packets\n", size );
+      queue_stealing ( my, remote, size );
+    }
 
   queue_unlock ( remote );
-
-  return 1;
+  return size;
 }
 
 size_t
@@ -126,10 +133,9 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
   struct rte_mbuf *pkts[BURST_SIZE];
   struct rte_mbuf *pkt;
   uint16_t nb_rx;
-  int remote_worker = ctx->worker_id + 1;
 
   queue_lock ( ctx->rxq );
-  // DEBUG ( "Worker: %u\n", ctx->worker_id );
+  DEBUG ( "Worker: %u\n", ctx->worker_id );
   while ( 1 )
     {
       if ( !queue_is_empty ( ctx->rxq ) )
@@ -140,22 +146,18 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
         {
           // DEBUG ( "Queue %u received %u packets\n", ctx->queue, nb_rx );
           // DEBUG ( "Worker %u received %u packets\n", ctx->worker_id, nb_rx );
-          uint32_t ret =
-                  queue_enqueue_bulk ( ctx->rxq, ( void ** ) pkts, nb_rx );
-
-          if ( ret == 0 )
-            ERROR ( "%s\n", "Error enqueue bulk" );
+          if ( !queue_enqueue_bulk ( ctx->rxq, ( void ** ) pkts, nb_rx ) )
+            FATAL ( "%s\n", "Error enqueue bulk" );
 
           goto done;
         }
 
-      sleep ( 1 );  // TODO:
-
+      int remote_worker = ctx->worker_id;
       for ( int i = 0; i < ctx->tot_workers; i++ )
         {
           remote_worker = ( remote_worker + 1 ) % ctx->tot_workers;
 
-          if ( ctx->rxq == &ctx->rxqs[remote_worker] )
+          if ( ctx->worker_id == remote_worker )
             continue;
 
           // DEBUG ( "Worker %u try stealing from %u\n",

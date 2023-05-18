@@ -9,6 +9,7 @@
 #include <string.h>  // strerror
 
 #define _INFO "[INFO] "
+#define _WARNING "[WARNING] "
 #define _DEBUG "[DEBUG] "
 #define _ERROR "[ERROR] "
 #define _FATAL "[FATAL] "
@@ -21,6 +22,13 @@ print ( const char *, ... );
     {                                             \
       fprintf ( stderr, _INFO fmt, __VA_ARGS__ ); \
     }                                             \
+  while ( 0 )
+
+#define WARNING( fmt, ... )                          \
+  do                                                 \
+    {                                                \
+      fprintf ( stderr, _WARNING fmt, __VA_ARGS__ ); \
+    }                                                \
   while ( 0 )
 
 #define ERROR( fmt, ... )                          \
