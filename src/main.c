@@ -113,34 +113,10 @@ dataplane ( struct config *conf )
 }
 
 // this functions run code of timer core.
-// Now timer core is the mais DPDK core
+// Now timer core is the main DPDK core
 static void
 core_timer ( void )
 {
-  // setup timer
-  struct sigaction sa = { .sa_sigaction = timer_handler,
-                          .sa_flags = SA_SIGINFO };
-  struct itimerval timer;
-
-  // Install timer_handler as the signal handler for SIGVTALRM
-  if ( sigaction ( SIGPROF, &sa, NULL ) == -1 )
-    {
-      perror ( "sigaction" );
-      exit ( 1 );
-    }
-
-  // Configure the timer to expire after 1 second
-  timer.it_value.tv_sec = 1;
-  timer.it_value.tv_usec = 0;
-  timer.it_interval.tv_sec = 1;
-  timer.it_interval.tv_usec = 0;
-
-  // Start the timer
-  if ( setitimer ( ITIMER_PROF, &timer, NULL ) == -1 )
-    {
-      perror ( "setitimer" );
-      exit ( 1 );
-    }
 
   while ( 1 )
     ;
