@@ -22,15 +22,16 @@ struct queue
 };
 
 static inline void
-queue_lock ( struct queue *q )
+queue_init ( struct queue *q )
 {
-  rte_spinlock_lock ( &q->lock );
+  rte_spinlock_init ( &q->lock );
+  q->head = q->tail = 0;
 }
 
 static inline void
-queue_unlock ( struct queue *q )
+queue_lock ( struct queue *q )
 {
-  rte_spinlock_unlock ( &q->lock );
+  rte_spinlock_lock ( &q->lock );
 }
 
 static inline int
@@ -40,13 +41,12 @@ queue_trylock ( struct queue *q )
 }
 
 static inline void
-queue_init ( struct queue *q )
+queue_unlock ( struct queue *q )
 {
-  rte_spinlock_init ( &q->lock );
-  q->head = q->tail = 0;
+  rte_spinlock_unlock ( &q->lock );
 }
 
-static inline bool
+static inline int
 queue_is_empty ( struct queue *q )
 {
   return q->head == q->tail;

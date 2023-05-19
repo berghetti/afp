@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <rte_ring_core.h>
+#include <rte_ring_elem.h>
+
 #include "queue.h"
 
 // per worker state
@@ -13,9 +16,10 @@ struct afp_ctx
 {
   uint16_t worker_id;
   uint16_t tot_workers;
-  uint16_t queue;  // hardware queue idx
+  uint16_t hwq;  // hardware queue idx
   struct queue *rxq;
   struct queue *rxqs;
+  struct rte_ring *wait_queue;
 };
 
 typedef struct afp_ctx afp_ctx_t;

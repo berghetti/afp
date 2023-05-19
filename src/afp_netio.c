@@ -43,6 +43,11 @@ static struct rte_ether_addr my_ether;
 // static struct rte_ether_addr client_ether = {
 //  .addr_bytes = { 0x00, 0x11, 0x22, 0x33, 0x02, 0x01 },
 //};
+//
+
+// TODO: add this to a header file
+extern void
+exit_context ();
 
 #define BURST_SIZE 32
 
@@ -141,7 +146,7 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
       if ( !queue_is_empty ( ctx->rxq ) )
         goto done;
 
-      nb_rx = rte_eth_rx_burst ( port_id, ctx->queue, pkts, BURST_SIZE );
+      nb_rx = rte_eth_rx_burst ( port_id, ctx->hwq, pkts, BURST_SIZE );
       if ( nb_rx )
         {
           // DEBUG ( "Queue %u received %u packets\n", ctx->queue, nb_rx );
@@ -152,8 +157,13 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
           goto done;
         }
 
-      int remote_worker = ctx->worker_id;
-      for ( int i = 0; i < ctx->tot_workers; i++ )
+      // before try work stealing, check if has long request to handle
+      if ( rte_ring_count ( ctx->wait_queue ) )
+        exit_context ();
+
+      // uint16_t remote_worker = ctx->worker_id;
+      static __thread uint16_t remote_worker = 0;
+      for ( uint16_t i = 0; i < ctx->tot_workers; i++ )
         {
           remote_worker = ( remote_worker + 1 ) % ctx->tot_workers;
 
@@ -252,7 +262,7 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
   // Total size packet
   pkt->pkt_len = pkt->data_len = MIN_PKT_SIZE + len;
 
-  return rte_eth_tx_burst ( port_id, ctx->queue, &pkt, 1 );
+  return rte_eth_tx_burst ( port_id, ctx->hwq, &pkt, 1 );
 }
 
 void
