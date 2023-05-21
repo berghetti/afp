@@ -23,6 +23,7 @@
 #include <rte_launch.h>
 #include <rte_lcore.h>
 #include <rte_memory.h>
+#include <rte_malloc.h>
 #include <rte_per_lcore.h>
 #include <sys/types.h>
 
@@ -33,8 +34,7 @@
 #include "debug.h"
 #include "afp_netio.h"
 #include "queue.h"
-
-#include <rte_malloc.h>
+#include "context.h"
 
 #define MAX_WORKERS 32
 
@@ -99,8 +99,7 @@ static void
 interrupt_handler ( int sig )
 {
   // If not more work continue current request
-  // TODO: check hardware queue?
-  if ( queue_is_empty ( &rxqs[worker_id] ) )
+  if ( !has_work_in_queues ( &rxqs[worker_id], hwqs[worker_id] ) )
     return;
 
   // enqueue long request
@@ -120,49 +119,6 @@ exit_context ( void )
 {
   check_wait_queue = true;
   setcontext ( &main_ctx );
-}
-
-// TODO: Shinjuku use 2 KiB of stack
-#define STACK_SIZE 2 * 1024
-
-static inline void
-context_alloc ( ucontext_t **u )
-{
-  // TODO: create a mempool to this allocations
-  ucontext_t *ctx;
-  ctx = rte_malloc ( NULL, sizeof ( ucontext_t ), 0 );
-  if ( !ctx )
-    FATAL ( "%s\n", "Error allocate stack memory to context" );
-
-  void *stack = rte_malloc ( NULL, STACK_SIZE, 0 );
-  if ( !stack )
-    FATAL ( "%s\n", "Error allocate stack memory to context" );
-
-  ctx->uc_stack.ss_sp = stack;
-  ctx->uc_stack.ss_size = STACK_SIZE;
-  ctx->uc_stack.ss_flags = 0;
-
-  *u = ctx;
-}
-
-// https://elixir.bootlin.com/glibc/glibc-2.37/source/sysdeps/unix/sysv/linux/x86_64/makecontext.c
-// https://github.com/stanford-mast/shinjuku/blob/46a2348b48c6dc79ea08a69f3c624c844c8a65cd/inc/ix/context.h#L79
-static inline void
-context_link ( ucontext_t *c, ucontext_t *uc_link )
-{
-  uintptr_t *sp;
-
-  /* Set up the sp pointer so that we save uc_link in the correct address. */
-  sp = ( ( uintptr_t * ) c->uc_stack.ss_sp + c->uc_stack.ss_size );
-  sp -= 1;
-
-  /* We assume that we have less than 6 arguments here.
-   * Align stack to multuple of 16, clearning last four bits and reserve space
-   * to return address */
-  sp = ( uintptr_t * ) ( ( ( ( uintptr_t ) sp ) & -16L ) - 8 );
-
-  c->uc_link = uc_link;
-  sp[1] = ( uintptr_t ) uc_link;
 }
 
 static int
@@ -198,8 +154,11 @@ worker ( void *arg )
   while ( 1 )
     {
       DEBUG ( "Creating context on worker %u\n", worker_id );
-      context_alloc ( &worker_app_ctx );
-      context_link ( worker_app_ctx, &main_ctx );
+      worker_app_ctx = context_alloc ();
+      if ( !worker_app_ctx )
+        FATAL ( "%s\n", "Error allocate context worker" );
+
+      context_setlink ( worker_app_ctx, &main_ctx );
       getcontext ( worker_app_ctx );
       makecontext ( worker_app_ctx,
                     ( void ( * ) ( void ) ) wrapper_app,
@@ -223,9 +182,7 @@ worker ( void *arg )
                                       ( void ** ) &worker_app_ctx ) )
             {
               // current link can be from another thread, update this.
-              // TODO: aqui provavelmente vou precisar alterar stack desse
-              // contexto tbm, ver hack do Shinjuku.
-              context_link ( worker_app_ctx, &main_ctx );
+              context_setlink ( worker_app_ctx, &main_ctx );
               setcontext ( worker_app_ctx );
             }
         }

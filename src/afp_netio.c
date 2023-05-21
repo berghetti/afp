@@ -21,6 +21,7 @@
 #include <rte_common.h>
 #include <rte_config.h>
 #include <rte_power_intrinsics.h>
+#include "queue.h"
 #include "rte_ethdev_trace_fp.h"
 #include "rte_dev_info.h"
 #include "rte_eth_ctrl.h"
@@ -132,30 +133,39 @@ work_stealing ( struct queue *my, struct queue *remote )
   return size;
 }
 
+bool
+has_work_in_queues ( struct queue *rxq, uint16_t hwq )
+{
+  if ( !queue_is_empty ( rxq ) )
+    return true;
+
+  struct rte_mbuf *pkts[BURST_SIZE];
+  uint16_t nb_rx;
+
+  nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
+  if ( nb_rx )
+    {
+      // DEBUG ( "Queue %u received %u packets\n", ctx->queue, nb_rx );
+      // DEBUG ( "Worker %u received %u packets\n", ctx->worker_id, nb_rx );
+      if ( !queue_enqueue_bulk ( rxq, ( void ** ) pkts, nb_rx ) )
+        FATAL ( "%s\n", "Error enqueue bulk" );
+
+      return true;
+    }
+
+  return false;
+}
+
 size_t
 afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 {
-  struct rte_mbuf *pkts[BURST_SIZE];
   struct rte_mbuf *pkt;
-  uint16_t nb_rx;
-
   queue_lock ( ctx->rxq );
   DEBUG ( "Worker: %u\n", ctx->worker_id );
   while ( 1 )
     {
-      if ( !queue_is_empty ( ctx->rxq ) )
+      if ( has_work_in_queues ( ctx->rxq, ctx->hwq ) )
         goto done;
-
-      nb_rx = rte_eth_rx_burst ( port_id, ctx->hwq, pkts, BURST_SIZE );
-      if ( nb_rx )
-        {
-          // DEBUG ( "Queue %u received %u packets\n", ctx->queue, nb_rx );
-          // DEBUG ( "Worker %u received %u packets\n", ctx->worker_id, nb_rx );
-          if ( !queue_enqueue_bulk ( ctx->rxq, ( void ** ) pkts, nb_rx ) )
-            FATAL ( "%s\n", "Error enqueue bulk" );
-
-          goto done;
-        }
 
       // before try work stealing, check if has long request to handle
       if ( rte_ring_count ( ctx->wait_queue ) )
@@ -186,10 +196,10 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 
 done:
   pkt = queue_dequeue ( ctx->rxq );
+  queue_unlock ( ctx->rxq );
   // DEBUG ( "Rxq size on worker %u: %u\n",
   //        ctx->worker_id,
   //        queue_count ( ctx->rxq ) );
-  queue_unlock ( ctx->rxq );
 
   if ( parse_pkt ( pkt, data, len ) )
     {

@@ -39,6 +39,9 @@ struct sock
 void
 afp_netio_init ( struct config * );
 
+bool
+has_work_in_queues ( struct queue *rxq, uint16_t hwq );
+
 size_t
 afp_recv ( afp_ctx_t *, void **, uint16_t *, struct sock * );
 
