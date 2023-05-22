@@ -21,7 +21,6 @@
 #include <rte_common.h>
 #include <rte_config.h>
 #include <rte_power_intrinsics.h>
-#include "queue.h"
 #include "rte_ethdev_trace_fp.h"
 #include "rte_dev_info.h"
 #include "rte_eth_ctrl.h"
@@ -35,21 +34,19 @@
 #include <rte_atomic.h>
 
 #include "dpdk.h"
+#include "queue.h"
 #include "afp_netio.h"
 #include "debug.h"
 #include "interrupt.h"
 #include "timer.h"
+#include "compiler.h"
 
 static uint16_t port_id;
-static struct rte_mempool *pkt_pool;
+// static struct rte_mempool *pkt_pool;
 static struct rte_ether_addr my_ether;
-// static struct rte_ether_addr client_ether = {
-//  .addr_bytes = { 0x00, 0x11, 0x22, 0x33, 0x02, 0x01 },
-//};
-//
 
 // TODO: add this to a header file
-extern void
+extern void __noreturn
 exit_to_context ( void * );
 
 #define BURST_SIZE 32
@@ -162,22 +159,12 @@ size_t
 afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 {
   struct rte_mbuf *pkt;
-  interrupt_disable ();
-  timer_disable ( ctx->worker_id );
   queue_lock ( ctx->rxq );
   DEBUG ( "Worker: %u\n", ctx->worker_id );
   while ( 1 )
     {
       if ( has_work_in_queues ( ctx->rxq, ctx->hwq ) )
         goto done;
-
-      // before try work stealing, check if has long request to handle
-      // if ( rte_ring_count ( ctx->wait_queue ) )
-      //  {
-      //    DEBUG ( "Worker %u exit_context\n", ctx->worker_id );
-      //    queue_unlock ( ctx->rxq );
-      //    exit_context ();
-      //  }
 
       void *long_ctx;
       if ( !rte_ring_mc_dequeue ( ctx->wait_queue, &long_ctx ) )
@@ -186,7 +173,6 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
           exit_to_context ( long_ctx );
         }
 
-      // uint16_t remote_worker = ctx->worker_id;
       static __thread uint16_t remote_worker = 0;
       for ( uint16_t i = 0; i < ctx->tot_workers; i++ )
         {
@@ -224,7 +210,6 @@ done:
 
   s->pkt = pkt;
 
-  interrupt_enable ();
   return 1;
 }
 
@@ -234,16 +219,14 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
   // DEBUG ( "%s\n", "send pkt" );
   struct rte_mbuf *pkt = s->pkt;
 
-  // need this to offloading cksum to hardware
+  // offloading cksum to hardware
   pkt->ol_flags |= ( RTE_MBUF_F_TX_IPV4 | RTE_MBUF_F_TX_IP_CKSUM |
                      RTE_MBUF_F_TX_UDP_CKSUM );
 
   struct rte_ether_hdr *eth_hdr;
   eth_hdr = rte_pktmbuf_mtod ( pkt, struct rte_ether_hdr * );
-  // eth_hdr->dst_addr = client_ether;
   eth_hdr->dst_addr = eth_hdr->src_addr;
   eth_hdr->src_addr = my_ether;
-  // eth_hdr->ether_type = rte_cpu_to_be_16 ( RTE_ETHER_TYPE_IPV4 );
 
   uint32_t offset = sizeof ( struct rte_ether_hdr );
   struct rte_ipv4_hdr *ip_hdr;
@@ -294,7 +277,7 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
 void
 afp_netio_init ( struct config *conf )
 {
-  pkt_pool = dpdk_init ( conf->port_id, conf->num_queues );
+  dpdk_init ( conf->port_id, conf->num_queues );
   port_id = conf->port_id;
   my_ether = conf->my_ether_addr;
 }

@@ -5,6 +5,8 @@
 #include <generic/rte_spinlock.h>
 #include <stdint.h>
 
+#include "compiler.h"
+
 /*
  * Ring queue FIFO.
  * Usable size is QUEUE_SIZE - 1.
@@ -19,7 +21,7 @@ struct queue
   uint32_t head;
   uint32_t tail;
   void *data[QUEUE_SIZE];
-};
+} __aligned ( CACHE_LINE_SIZE );
 
 static inline void
 queue_init ( struct queue *q )

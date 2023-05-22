@@ -6,11 +6,12 @@
 
 #include "interrupt.h"
 #include "debug.h"
+#include "afp_internal.h"
 
 #define MISSALIGN 5  // interval between workes interruptions in us
 #define QUANTUM 5    // in us
 
-static uint64_t workers_alarm[32];
+static uint64_t workers_alarm[MAX_WORKERS];
 
 static inline void
 cpu_relax ( void )
@@ -37,7 +38,7 @@ timer_main ( uint16_t tot_workers )
   DEBUG ( "Core %u on timer management\n", rte_lcore_id () );
 
   uint64_t cycles_per_us = rte_get_tsc_hz () / 1000000UL;
-  INFO ( "Cyles per us: %lu\n", cycles_per_us );
+  INFO ( "Cycles per us: %lu\n", cycles_per_us );
 
   uint64_t quantum = QUANTUM * cycles_per_us;
   uint64_t missalign = MISSALIGN * cycles_per_us;
@@ -67,12 +68,15 @@ timer_main ( uint16_t tot_workers )
       while ( rte_get_tsc_cycles () < wait )
         cpu_relax ();
 
-      last_sent = rte_get_tsc_cycles ();
-      // rte_atomic64_set ( &alarms[worker], UINT64_MAX );
-      workers_alarm[worker] = UINT64_MAX;
+      // worker not disarm alarm?
+      if ( workers_alarm[worker] != UINT64_MAX )
+        {
+          last_sent = rte_get_tsc_cycles ();
+          workers_alarm[worker] = UINT64_MAX;
 
-      // DEBUG ( "%lu: Send interrupt to worker %u\n", last_sent, worker );
-      interrupt_send ( worker );
+          // DEBUG ( "%lu: Send interrupt to worker %u\n", last_sent, worker );
+          interrupt_send ( worker );
+        }
     }
 }
 

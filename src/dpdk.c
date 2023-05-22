@@ -1,6 +1,4 @@
 
-// https://doc.dpdk.org/api/rte__ethdev_8h.html
-
 #include <rte_errno.h>
 #include <rte_lcore.h>
 #include <stdint.h>
