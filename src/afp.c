@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 #include "afp.h"
-#include "afp_netio.h"
 #include "timer.h"
 #include "debug.h"
 

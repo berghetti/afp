@@ -1,39 +1,10 @@
 
 #define _GNU_SOURCE  // gettid
-#include <signal.h>
-#include <errno.h>
-#include <generic/rte_cycles.h>
-#include <rte_common.h>
+#include <unistd.h>
+
 #include <rte_errno.h>
 #include <rte_ethdev.h>
-#include <rte_ether.h>
-#include <rte_ip.h>
-#include <rte_mbuf.h>
-#include <rte_mbuf_core.h>
-#include <rte_memcpy.h>
-#include <rte_mempool.h>
-#include <rte_ring.h>
-#include <rte_udp.h>
-#include <sched.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/queue.h>
-
-#include <rte_debug.h>
-#include <rte_eal.h>
-#include <rte_launch.h>
-#include <rte_lcore.h>
-#include <rte_memory.h>
 #include <rte_malloc.h>
-#include <rte_per_lcore.h>
-#include <sys/types.h>
-
-#include <sys/ucontext.h>
-#include <ucontext.h>
-#include <unistd.h>
 
 #include "dpdk.h"
 #include "debug.h"
