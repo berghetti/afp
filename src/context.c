@@ -1,9 +1,9 @@
 
-// TODO: Shinjuku use 2 KiB of stack
 #include <rte_malloc.h>
 #include <ucontext.h>
 
-#define STACK_SIZE 2 * 1024
+// TODO: Shinjuku use 2 KiB of stack
+#define STACK_SIZE 16 * 1024
 
 ucontext_t *
 context_alloc ( void )

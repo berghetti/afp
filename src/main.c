@@ -1,6 +1,9 @@
 
+#include <signal.h>
+#define _GNU_SOURCE  // gettid
 #include <errno.h>
 #include <generic/rte_cycles.h>
+#include <rte_common.h>
 #include <rte_errno.h>
 #include <rte_ethdev.h>
 #include <rte_ether.h>
@@ -11,6 +14,7 @@
 #include <rte_mempool.h>
 #include <rte_ring.h>
 #include <rte_udp.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -29,17 +33,21 @@
 
 #include <sys/ucontext.h>
 #include <ucontext.h>
+#include <unistd.h>
 
 #include "dpdk.h"
 #include "debug.h"
 #include "afp_netio.h"
 #include "queue.h"
 #include "context.h"
+#include "interrupt.h"
+#include "timer.h"
 
 #define MAX_WORKERS 32
 
 static struct config conf = { .port_id = 0 };
 
+// TODO: make __thread variables
 static struct queue rxqs[MAX_WORKERS];
 static uint16_t hwqs[MAX_WORKERS];
 
@@ -51,8 +59,10 @@ static __thread uint16_t worker_id;
 static __thread ucontext_t main_ctx;
 static __thread ucontext_t *worker_app_ctx;
 
-// only worker_app_ctx turn this true
-static __thread bool check_wait_queue = false;
+static __thread ucontext_t *tmp_long_ctx;
+
+void
+afp_send_feedback ( int );
 
 // simule application code...
 void
@@ -62,16 +72,38 @@ app ( afp_ctx_t *ctx )
   uint16_t len;
   struct sock sock;
 
-  char buff[] = "Hi DPDK!\n";
+  char buff[] = "Short response!\n";
+  char b[] = "LONG response!\n";
 
+  size_t t;
   while ( 1 )
     {
-      if ( afp_recv ( ctx, &data, &len, &sock ) )
+      if ( !( t = afp_recv ( ctx, &data, &len, &sock ) ) )
+        continue;
+
+      if ( !strcmp ( data, "LONG\n" ) )
         {
+          int i = 50;
+          DEBUG ( "Worker %u received long request\n", worker_id );
+          afp_send_feedback ( 0 );
+          while ( i-- )
+            {
+              int j = 100000000UL;
+              while ( j-- )
+                ;
+              DEBUG ( "long request: %u\n", i );
+            }
+
+          afp_send ( ctx, b, sizeof ( b ), &sock );
+          afp_send_feedback ( 1 );
+        }
+      else
+        {
+          DEBUG ( "Worker %u received short request\n", worker_id );
           // DEBUG ( "App received packet with size %u\n", len );
           // DEBUG ( "%s\n", ( char * ) data );
 
-          rte_delay_us ( 500 );
+          // rte_delay_ms ( 500 );
 
           afp_send ( ctx, buff, sizeof ( buff ), &sock );
         }
@@ -86,6 +118,24 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
   app ( ctx );
 }
 
+void
+afp_send_feedback ( int type )
+{
+  uint64_t now = rte_get_tsc_cycles ();
+
+  switch ( type )
+    {
+      case 0:
+        DEBUG ( "%lu: Starting timer on worker %u\n", now, worker_id );
+        timer_set ( worker_id, now );
+        break;
+
+      case 1:
+        DEBUG ( "Worker %u finished long request\n", worker_id );
+        timer_disable ( worker_id );
+    }
+}
+
 // aqui preciso checar se a requisição atual continua o processamento.
 // se não, coloca na wait queue e inicia um novo contexto.
 // Para criar o novo contexto posso restaurar o main_ctx que vai cair no loop
@@ -95,29 +145,45 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 //
 // se sim, apenas retorna do handler;
 // TODO: signal or dune interrupt
+//
 static void
 interrupt_handler ( int sig )
 {
-  // If not more work continue current request
+  uint64_t now = rte_get_tsc_cycles ();
+  // DEBUG ( "%lu: Worker %u received interrupt\n", now, worker_id );
+
+  // Only get here when received a long request.
+  // If not more work, continue current request
   if ( !has_work_in_queues ( &rxqs[worker_id], hwqs[worker_id] ) )
-    return;
+    {
+      // DEBUG ( "Worker %u restart timer\n", worker_id );
+      timer_set ( worker_id, now );
+      return;
+    }
 
   // enqueue long request
+  DEBUG ( "enqueue ctx %p\n", worker_app_ctx );
   if ( rte_ring_mp_enqueue ( wait_queue, worker_app_ctx ) )
     ERROR ( "%s\n",
             "Error enqueue long request. This is an memory leak and the "
             "request is lost." );
 
-  // save worker_app_ctx and jump to main_ctx, that will create new app context.
-  // next time worker_app_ctx run this starting after swapcontext call
-  // and return to original app code
+  DEBUG ( "Worker %u return from interrupt\n", worker_id );
+
+  // save worker_app_ctx and jump to main_ctx, that will create new app
+  // context. next time worker_app_ctx run this starting after swapcontext
+  // call and return to original app code
   swapcontext ( worker_app_ctx, &main_ctx );
 }
 
+// TODO: no return
 void
-exit_context ( void )
+exit_to_context ( ucontext_t *long_ctx )
 {
-  check_wait_queue = true;
+  DEBUG ( "Worker %u swap to long request %p\n", worker_id, long_ctx );
+
+  tmp_long_ctx = long_ctx;
+
   setcontext ( &main_ctx );
 }
 
@@ -128,10 +194,13 @@ worker ( void *arg )
 
   if ( rte_eth_dev_socket_id ( 0 ) >= 0 &&
        rte_eth_dev_socket_id ( 0 ) != ( int ) rte_socket_id () )
-    WARNING ( "port %u is on remote NUMA node to "
-              "polling thread.\n\tPerformance will "
-              "not be optimal.\n",
-              0 );
+    {
+      WARNING ( "port %u is on remote NUMA node to "
+                "polling thread.\n\tPerformance will "
+                "not be optimal.\n",
+                0 );
+    }
+
   INFO ( "Starting worker %u on core %u and queue %u.\n",
          worker_id,
          rte_lcore_id (),
@@ -144,6 +213,8 @@ worker ( void *arg )
                     .rxqs = rxqs,
                     .wait_queue = wait_queue };
 
+  interrupt_register_work_tid ( worker_id, gettid () );
+
   queue_init ( ctx.rxq );
 
   void *ctxp = &ctx;
@@ -154,10 +225,12 @@ worker ( void *arg )
   while ( 1 )
     {
       DEBUG ( "Creating context on worker %u\n", worker_id );
+
       worker_app_ctx = context_alloc ();
       if ( !worker_app_ctx )
         FATAL ( "%s\n", "Error allocate context worker" );
 
+      DEBUG ( "ctx %p\n", worker_app_ctx );
       context_setlink ( worker_app_ctx, &main_ctx );
       getcontext ( worker_app_ctx );
       makecontext ( worker_app_ctx,
@@ -169,23 +242,44 @@ worker ( void *arg )
       // go to app context
       swapcontext ( &main_ctx, worker_app_ctx );
 
-      // only main_ctx come here
-      if ( check_wait_queue )
+      if ( tmp_long_ctx )
         {
-          check_wait_queue = false;
-
           // TODO: replace to mempool
           rte_free ( worker_app_ctx->uc_stack.ss_sp );
           rte_free ( worker_app_ctx );
 
-          if ( !rte_ring_mc_dequeue ( wait_queue,
-                                      ( void ** ) &worker_app_ctx ) )
-            {
-              // current link can be from another thread, update this.
-              context_setlink ( worker_app_ctx, &main_ctx );
-              setcontext ( worker_app_ctx );
-            }
+          worker_app_ctx = tmp_long_ctx;
+          tmp_long_ctx = NULL;
+
+          context_setlink ( worker_app_ctx, &main_ctx );
+
+          // known long request, rearming alarm.
+          timer_set ( worker_id, rte_get_tsc_cycles () );
+          setcontext ( worker_app_ctx );
         }
+
+      //// only main_ctx come here
+      // if ( check_wait_queue )
+      //  {
+      //    check_wait_queue = false;
+
+      //    // TODO: replace to mempool
+      //    rte_free ( worker_app_ctx->uc_stack.ss_sp );
+      //    rte_free ( worker_app_ctx );
+
+      //    if ( !rte_ring_mc_dequeue ( wait_queue,
+      //                                ( void ** ) &worker_app_ctx ) )
+      //      {
+      //        DEBUG ( "dequeue ctx %p\n", worker_app_ctx );
+
+      //        // current link can be from another thread, update this.
+      //        context_setlink ( worker_app_ctx, &main_ctx );
+
+      //        // known long request, rearming alarm.
+      //        timer_set ( worker_id, rte_get_tsc_cycles () );
+      //        setcontext ( worker_app_ctx );
+      //      }
+      //  }
     }
 
   return 0;
@@ -206,16 +300,6 @@ workers_init ( void )
               core_id,
               rte_strerror ( rte_errno ) );
   }
-}
-
-// this functions run code of timer core.
-// timer core is the main DPDK core
-static void
-core_timer ( void )
-{
-
-  while ( 1 )
-    ;
 }
 
 // initialize hardware queues indexes
@@ -260,10 +344,11 @@ main ( int argc, char **argv )
   wait_queue_init ();
   afp_netio_init ( &conf );
 
+  interrupt_init ( interrupt_handler );
+  timer_init ( tot_workers );
   workers_init ();
 
-  DEBUG ( "%s\n", "Main core going to timer function" );
-  core_timer ();
+  timer_main ( tot_workers );
 
   rte_ring_free ( wait_queue );
   /* clean up the EAL */

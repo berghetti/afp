@@ -37,6 +37,8 @@
 #include "dpdk.h"
 #include "afp_netio.h"
 #include "debug.h"
+#include "interrupt.h"
+#include "timer.h"
 
 static uint16_t port_id;
 static struct rte_mempool *pkt_pool;
@@ -48,7 +50,7 @@ static struct rte_ether_addr my_ether;
 
 // TODO: add this to a header file
 extern void
-exit_context ();
+exit_to_context ( void * );
 
 #define BURST_SIZE 32
 
@@ -160,6 +162,8 @@ size_t
 afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 {
   struct rte_mbuf *pkt;
+  interrupt_disable ();
+  timer_disable ( ctx->worker_id );
   queue_lock ( ctx->rxq );
   DEBUG ( "Worker: %u\n", ctx->worker_id );
   while ( 1 )
@@ -168,8 +172,19 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
         goto done;
 
       // before try work stealing, check if has long request to handle
-      if ( rte_ring_count ( ctx->wait_queue ) )
-        exit_context ();
+      // if ( rte_ring_count ( ctx->wait_queue ) )
+      //  {
+      //    DEBUG ( "Worker %u exit_context\n", ctx->worker_id );
+      //    queue_unlock ( ctx->rxq );
+      //    exit_context ();
+      //  }
+
+      void *long_ctx;
+      if ( !rte_ring_mc_dequeue ( ctx->wait_queue, &long_ctx ) )
+        {
+          queue_unlock ( ctx->rxq );
+          exit_to_context ( long_ctx );
+        }
 
       // uint16_t remote_worker = ctx->worker_id;
       static __thread uint16_t remote_worker = 0;
@@ -209,6 +224,7 @@ done:
 
   s->pkt = pkt;
 
+  interrupt_enable ();
   return 1;
 }
 
