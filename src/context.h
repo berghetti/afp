@@ -1,10 +1,41 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
 
+#include <rte_malloc.h>
+#include <sys/ucontext.h>
 #include <ucontext.h>
 
-ucontext_t *
-context_alloc ( void );
+#define STACK_SIZE 16 * 1024
+
+static inline ucontext_t *
+context_alloc ( void )
+{
+  // TODO: create a mempool to this allocations
+  ucontext_t *ctx;
+  ctx = rte_malloc ( NULL, sizeof ( ucontext_t ), 0 );
+  if ( !ctx )
+    return NULL;
+
+  void *stack = rte_malloc ( NULL, STACK_SIZE, 0 );
+  if ( !stack )
+    {
+      rte_free ( ctx );
+      return NULL;
+    }
+
+  ctx->uc_stack.ss_sp = stack;
+  ctx->uc_stack.ss_size = STACK_SIZE;
+  ctx->uc_stack.ss_flags = 0;
+
+  return ctx;
+}
+
+static inline void
+context_free ( ucontext_t *u )
+{
+  rte_free ( u->uc_stack.ss_sp );
+  rte_free ( u );
+}
 
 // https://elixir.bootlin.com/glibc/glibc-2.37/source/sysdeps/unix/sysv/linux/x86_64/makecontext.c
 // https://github.com/stanford-mast/shinjuku/blob/master/inc/ix/context.h

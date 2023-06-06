@@ -184,10 +184,7 @@ worker ( void *arg )
       // swapt between context without work to long request context
       if ( tmp_long_ctx )
         {
-          // TODO: replace to mempool
-          rte_free ( worker_app_ctx->uc_stack.ss_sp );
-          rte_free ( worker_app_ctx );
-
+          context_free ( worker_app_ctx );
           worker_app_ctx = tmp_long_ctx;
           tmp_long_ctx = NULL;
 
