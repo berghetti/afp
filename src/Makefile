@@ -20,7 +20,7 @@ LDLIBS = $(shell $(PKGCONF) --libs libdpdk)
 
 all: $(BUILD_DIR)/$(APP)
 
-$(BUILD_DIR)/$(APP): $(OBJS) Makefile | $(BUILD_DIR)
+$(BUILD_DIR)/$(APP): $(OBJS) $(H_SRCS) Makefile | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 $(BUILD_DIR)/%.o: %.c $(H_SRCS)
