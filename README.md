@@ -1,13 +1,14 @@
 
 ## AFP
 
-### Install prerequisits
+### Install prerequisits and run setup script
     ./install_prerequisites.sh
+    ./scripts/setup.sh
 
-### Compile AFP
-    make -j $(nproc) -C $ROOT_PATH static_libake
-    make submodules
-    make database
+### Compile
+    make            # AFP Library
+    make submodules # dpdk and rocksdb
+    make database   # rocksdb database create
 
 
 ### DIRS
@@ -15,3 +16,4 @@
     deps: dependencys
     src: source code to library AFP
     scripts: general scripts
+    tests: general tests
