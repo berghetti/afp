@@ -9,6 +9,10 @@ clean:
 
 database:
 	$(MAKE) -C ./database
+	./database/create_db
+
+database-clean:
+	$(MAKE) -C ./database clean
 
 submodules: dpdk rocksdb
 
