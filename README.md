@@ -1,7 +1,7 @@
 
 ## AFP
 
-### Install prerequisits and run setup script
+### Install prerequisites and run setup script
     ./install_prerequisites.sh
     ./scripts/setup.sh
 
