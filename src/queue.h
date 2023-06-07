@@ -2,8 +2,10 @@
 #define QUEUE_H
 
 #include <stdbool.h>
-#include <generic/rte_spinlock.h>
 #include <stdint.h>
+
+#include <generic/rte_spinlock.h>
+#include <rte_branch_prediction.h>
 
 #include "compiler.h"
 
@@ -76,8 +78,8 @@ queue_count_free ( struct queue *q )
 static inline void *
 queue_enqueue ( struct queue *restrict q, void *data )
 {
-  if ( queue_is_full ( q ) )
-    NULL;
+  if ( unlikely ( queue_is_full ( q ) ) )
+    return NULL;
 
   q->data[q->head++ & MASK] = data;
   return data;
@@ -86,7 +88,7 @@ queue_enqueue ( struct queue *restrict q, void *data )
 static inline uint32_t
 queue_enqueue_bulk ( struct queue *restrict q, void **buff, uint32_t size )
 {
-  if ( queue_count_free ( q ) < size )
+  if ( unlikely ( queue_count_free ( q ) < size ) )
     return 0;
 
   for ( uint32_t i = 0; i < size; i++ )
