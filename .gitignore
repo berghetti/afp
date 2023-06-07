@@ -1,3 +1,6 @@
 *.o
 src/build/*
 tags
+
+# binarys
+database/create_db

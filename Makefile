@@ -1,15 +1,26 @@
 
-.PHONY: all dpdk dpdk-clean clean
+.PHONY: *
 
 all:
-	make -C ./src
+	$(MAKE) -C ./src
 
 clean:
-	make -C ./src clean
+	$(MAKE) -C ./src clean
+
+database:
+	$(MAKE) -C ./database
+
+submodules: dpdk rocksdb
+
+submodules-clean: rocksdb-clean
 
 dpdk:
-	./scripts/install_dpdk.sh
+	./deps/install_dpdk.sh
 
 dpdk-clean:
-	sudo rm -rf ./dpdk/build/
 
+rocksdb:
+	$(MAKE) -j $(shell nproc) -C ./deps/rocksdb static_lib
+
+rocksdb-clean:
+	$(MAKE) -C ./deps/rocksdb clean
