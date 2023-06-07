@@ -82,7 +82,7 @@ parse_pkt ( struct rte_mbuf *pkt, void **payload, uint16_t *payload_size )
  */
 #define div_up( x, d ) ( ( ( ( x ) + ( d ) -1 ) ) / ( d ) )
 
-// retorn amount work stolen
+// return amount work stolen
 static uint32_t
 work_stealing ( struct queue *my, struct queue *remote )
 {
