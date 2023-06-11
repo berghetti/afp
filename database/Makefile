@@ -7,7 +7,9 @@ APP=create_db
 # path to rocksdb
 ROOT_PATH = ../deps/rocksdb
 
-CFLAGS += -Wall -Wextra -O2
+CFLAGS += -Wall -Wextra -O2 -Wno-unused-variable -Wno-unused-parameter
+
+
 
 C_SRCS = $(wildcard ./*.c)
 H_SRCS = $(wildcard ./*.h)

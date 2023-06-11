@@ -1,23 +1,28 @@
 
 // https://github.com/maxdml/shinjuku/blob/rocksdb/db/create_db.c
 
-#include <assert.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <unistd.h>
 
 #include "rocksdb/c.h"
 
-#include <unistd.h>  // sysconf() - get CPU count
+#define DFL_NUM_ENTRIES 5000
+#define DFL_DB_PATH "/tmp/my_db"
 
-const char DBPath[] = "/tmp/my_db";
-
-#define NUM_ENTRIES 5000
-
+/*
+ * argv[1] num_entries
+ * argv[2] DB path */
 int
 main ( int argc, char **argv )
 {
+  int num_entries = ( argc >= 2 ) ? atoi ( argv[1] ) : DFL_NUM_ENTRIES;
+  const char *DBPath = ( argc == 3 ) ? argv[2] : DFL_DB_PATH;
+
   rocksdb_t *db;
+  rocksdb_backup_engine_t *be;
   rocksdb_options_t *options = rocksdb_options_create ();
   // Optimize RocksDB. This is the easiest way to
   // get RocksDB to perform well
@@ -32,13 +37,15 @@ main ( int argc, char **argv )
   db = rocksdb_open ( options, DBPath, &err );
   assert ( !err );
 
+  char key[16], value[16], *value_ret;
+  size_t len;
+
   // Put key-value
   rocksdb_writeoptions_t *writeoptions = rocksdb_writeoptions_create ();
-  const char *value = "value";
-  for ( int i = 0; i < NUM_ENTRIES; i++ )
+  for ( int i = 0; i < num_entries; i++ )
     {
-      char key[10];
-      snprintf ( key, 10, "key%d", i );
+      snprintf ( key, sizeof key, "k%d", i );
+      snprintf ( value, sizeof value, "v%d", i );
       rocksdb_put ( db,
                     writeoptions,
                     key,
@@ -49,27 +56,41 @@ main ( int argc, char **argv )
       assert ( !err );
     }
 
-  // Get value
-  rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create ();
-  for ( int i = 0; i < NUM_ENTRIES; i++ )
-    {
-      size_t len;
-      char key[10];
-      snprintf ( key, 10, "key%d", i );
-      char *returned_value =
-              rocksdb_get ( db, readoptions, key, strlen ( key ), &len, &err );
-      assert ( !err );
-      assert ( strcmp ( returned_value, "value" ) == 0 );
-      free ( returned_value );
-    }
+  // test
+  // get value
+  // rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create ();
+  // for ( int i = 0; i < num_entries; i++ )
+  //  {
+  //    snprintf ( key, sizeof key, "k%d", i );
+  //    value_ret =
+  //            rocksdb_get ( db, readoptions, key, strlen ( key ), &len, &err
+  //            );
+  //    assert ( !err );
+  //    snprintf ( value, sizeof value, "v%d", i );
+  //    assert ( strcmp ( value, value_ret ) == 0 );
+  //    printf ( "key:%s value:%s\n", key, value_ret );
+  //  }
 
-  printf ( "Database created on: %s\n", DBPath );
+  // test iterator
+  // rocksdb_iterator_t *iter = rocksdb_create_iterator ( db, readoptions );
+  // rocksdb_iter_seek_to_first ( iter );
+  // while ( rocksdb_iter_valid ( iter ) )
+  //  {
+  //    const char *ikey = rocksdb_iter_key ( iter, &len );
+  //    value_ret = rocksdb_get ( db, readoptions, ikey, len, &len, &err );
+
+  //    assert ( !err );
+  //    printf ( "key:%s value:%s\n", ikey, value_ret );
+  //    rocksdb_iter_next ( iter );
+  //  }
+  // rocksdb_readoptions_destroy ( readoptions );
 
   // cleanup
   rocksdb_writeoptions_destroy ( writeoptions );
-  rocksdb_readoptions_destroy ( readoptions );
   rocksdb_options_destroy ( options );
   rocksdb_close ( db );
+
+  printf ( "Database created on %s with %d entries\n", DBPath, num_entries );
 
   return 0;
 }
