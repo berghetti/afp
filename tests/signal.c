@@ -1,6 +1,11 @@
 
-// Single test overhead between send signal and get signal handler
+/* Single test overhead to send signal and get signal handler using various
+ * methods to send signal
+ *
+ * taskset -c 1 ./signal
+ */
 
+#define _GNU_SOURCE
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -8,13 +13,11 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
-#include "cycles_count.h"
+#include <x86intrin.h>
 
 #define RUNS 100000UL
-
-extern pid_t gettid (void);
-extern void tgkill (pid_t, pid_t, int);
 
 static volatile uint64_t ts;
 
@@ -22,23 +25,23 @@ static uint64_t i;
 static uint32_t samples[RUNS];
 
 static void
-handler (int sig, siginfo_t *info, void *ucontext)
+handler ( int sig )
 {
-  uint32_t t = rdtsc_end () - ts;
+  uint32_t t = __rdtsc () - ts;
 
   samples[i++] = t;
 }
 
 static int
-cmp (const void *a, const void *b)
+cmp ( const void *a, const void *b )
 {
-  return *(uint32_t *)a - *(uint32_t *)b;
+  return *( uint32_t * ) a - *( uint32_t * ) b;
 }
 
 static uint32_t
-percentile (uint32_t *buff, size_t len, float percentile)
+percentile ( uint32_t *buff, size_t len, float percentile )
 {
-  unsigned int idx = (len * percentile);
+  unsigned int idx = ( len * percentile );
   return buff[idx];
 }
 
@@ -49,107 +52,122 @@ reset ()
 }
 
 static void
-print (void)
+print ( char *msg )
 {
-  qsort (samples, RUNS, sizeof (samples[0]), cmp);
+  qsort ( samples, RUNS, sizeof ( samples[0] ), cmp );
 
   uint64_t i = RUNS;
   uint64_t sum = 0;
-  while (i--)
+  while ( i-- )
     sum += samples[i];
 
-  printf ("Min: %u\n"
-          "Max: %u\n"
-          "Avg: %lu\n"
-          "Median: %u\n"
-          "99%%: %u\n",
-          samples[0], samples[RUNS - 1], sum / RUNS,
-          percentile (samples, RUNS, 0.50f),
-          percentile (samples, RUNS, 0.99f));
+  printf ( "\n%s\n"
+           "  Min: %u\n"
+           "  Max: %u\n"
+           "  Avg: %lu\n"
+           "  Median: %u\n"
+           "  99%%: %u\n"
+           "  99.9%%: %u\n",
+           msg,
+           samples[0],
+           samples[RUNS - 1],
+           sum / RUNS,
+           percentile ( samples, RUNS, 0.50f ),
+           percentile ( samples, RUNS, 0.99f ),
+           percentile ( samples, RUNS, 0.999f ) );
 
   reset ();
 }
 
 static void
-f1 (void)
+f1 ( void )
 {
-  puts ("\nUsing raise");
   uint64_t i = RUNS;
-  while (i--)
+  while ( i-- )
     {
-      ts = rdtsc_start ();
-      raise (SIGUSR1);
+      ts = __rdtsc ();
+      raise ( SIGUSR1 );
     }
 
-  print ();
+  print ( "Using raise" );
 }
 
 static void
-f2 (void)
+f2 ( void )
 {
-  puts ("\nUsing kill");
 
   pid_t pid = getpid ();
   uint64_t i = RUNS;
-  while (i--)
+  while ( i-- )
     {
-      ts = rdtsc_start ();
-      kill (pid, SIGUSR1);
+      ts = __rdtsc ();
+      kill ( pid, SIGUSR1 );
     }
 
-  print ();
+  print ( "Using kill" );
 }
 
 static void
-f3 (void)
+f3 ( void )
 {
-  puts ("\nUsing sigqueue");
-
   union sigval sv = { .sival_int = 0 };
   pid_t pid = getpid ();
   uint64_t i = RUNS;
-  while (i--)
+  while ( i-- )
     {
-      ts = rdtsc_start ();
-      sigqueue (pid, SIGUSR1, sv);
+      ts = __rdtsc ();
+      sigqueue ( pid, SIGUSR1, sv );
     }
 
-  print ();
+  print ( "Using sigqueue" );
 }
 
 static void
-f4 (void)
+f4 ( void )
 {
-  puts ("\nUsing tgkill");
-
   pid_t tgid, tid;
-  tgid = tid = gettid (); // single thread
+  tgid = tid = gettid ();  // single thread
   uint64_t i = RUNS;
-  while (i--)
+  while ( i-- )
     {
-      ts = rdtsc_start ();
-      tgkill (tgid, tid, SIGUSR1);
+      ts = __rdtsc ();
+      tgkill ( tgid, tid, SIGUSR1 );
     }
 
-  print ();
+  print ( "Using tgkill" );
+}
+
+static void
+f5 ( void )
+{
+  pid_t tgid, tid;
+  tgid = tid = gettid ();
+  uint64_t i = RUNS;
+  while ( i-- )
+    {
+      ts = __rdtsc ();
+      syscall ( SYS_tgkill, tgid, tid, SIGUSR1 );
+    }
+
+  print ( "Using SYSCALL(tgkill)" );
 }
 
 int
-main (int argc, char **argv)
+main ( int argc, char **argv )
 {
-  sigset_t sg;
-  sigfillset (&sg);
-  struct sigaction act
-      = { .sa_sigaction = handler, .sa_mask = sg, .sa_flags = SA_SIGINFO };
-  sigaction (SIGUSR1, &act, NULL);
+  struct sigaction act = {
+    .sa_handler = handler,
+  };
 
-  printf ("Runs %lu\n", RUNS);
+  sigaction ( SIGUSR1, &act, NULL );
 
-  f1 (); // warmup
+  printf ( "Runs %lu\n", RUNS );
+
   f1 ();
   f2 ();
   f3 ();
   f4 ();
+  f5 ();
 
   return 0;
 }

@@ -20,32 +20,34 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#include <stdatomic.h>
-
 #include <x86intrin.h>
 
 #include "util.h"
 
 #define RUNS 100000UL
+#define MAX_WORKERS 32
 
 static int us;
 static int num_threads;
-static int ready;
+static volatile int ready, worker_stop;
+
+static pid_t tids[MAX_WORKERS];
 
 static uint32_t cycles_by_us;
 
-static struct timespec start;
+static uint32_t samples[RUNS];
+static uint32_t tsc_worker[RUNS];
+static uint64_t tsc_starts[RUNS], tsc_ends[RUNS];
 
-static pthread_barrier_t barrier;
+static __thread int worker_id;
+static uint64_t start_tsc;
 
-static __thread volatile uint64_t ts;
-static __thread uint32_t samples[RUNS];
-
+static uint32_t i = 0;
 static void
 handler ( int sig )
 {
-  static __thread uint64_t i = 0;
-  samples[i++] = __rdtsc () - ts;
+  // printf ( "Receiver(%u) %llu\n", worker_id, __rdtsc () );
+  tsc_worker[i++] = __rdtsc () - start_tsc;
 }
 
 static inline double
@@ -55,7 +57,7 @@ cycles2us ( uint32_t cycles )
 }
 
 static void
-print ( int thread_id )
+print ( uint32_t *samples, char *msg )
 {
   qsort ( samples, RUNS, sizeof ( samples[0] ), cmp_uint32 );
 
@@ -66,13 +68,13 @@ print ( int thread_id )
   p999 = percentile ( samples, RUNS, 0.999f );
   max = samples[RUNS - 1];
 
-  printf ( "\nThread %d\n"
+  printf ( "\n%s\n"
            "  Min:   %u (%.2f us)\n"
-           "  Mean:  %u (%.2f us)\n"
+           "  50%%:   %u (%.2f us)\n"
            "  99%%:   %u (%.2f us)\n"
            "  99.9%%: %u (%.2f us)\n"
            "  Max:   %u (%.2f us)\n",
-           thread_id,
+           msg,
            min,
            cycles2us ( min ),
            mean,
@@ -86,10 +88,40 @@ print ( int thread_id )
 }
 
 static void *
-f1 ( void *arg )
+worker ( void *arg )
 {
-  int i = ( int ) ( uintptr_t ) arg;
+  worker_id = ( int ) ( uintptr_t ) arg;
 
+  cpu_set_t cpuset;
+  CPU_ZERO ( &cpuset );
+  CPU_SET ( worker_id, &cpuset );
+  if ( pthread_setaffinity_np ( pthread_self (),
+                                sizeof ( cpu_set_t ),
+                                &cpuset ) )
+    {
+      fprintf ( stderr,
+                "Error to affinity thread %d to core %d\n",
+                worker_id,
+                worker_id );
+      exit ( 1 );
+    }
+
+  tids[worker_id] = gettid ();
+  // tids[worker_id] = pthread_self ();
+  ready++;
+  printf ( "Started worker thread %u on core %u\n", worker_id, worker_id );
+
+  while ( !worker_stop )
+    start_tsc = __rdtsc ();
+
+  // print ( samples_worker, "Worker" );
+
+  return 0;
+}
+
+static void
+sender ( int i )
+{
   cpu_set_t cpuset;
   CPU_ZERO ( &cpuset );
   CPU_SET ( i, &cpuset );
@@ -102,28 +134,36 @@ f1 ( void *arg )
     }
 
   pid_t tgid = getpid ();
-  pid_t tid = gettid ();
-  struct timespec now;
-  uint64_t end;
+  while ( ready < num_threads )
+    ;
 
-  uint64_t count = RUNS;
-  // First execution not await others threads. Assume as warm up.
-  while ( count-- )
+  printf ( "Started sender thread %u on core %u\n", i, i );
+
+  for ( unsigned int i = 0; i < RUNS; i++ )
     {
-      ts = __rdtsc ();
-      tgkill ( tgid, tid, SIGUSR1 );
+      tsc_starts[i] = __rdtsc ();
 
-      // ensure specific misalign between threads start
-      pthread_barrier_wait ( &barrier );
+      tgkill ( tgid, tids[1], SIGUSR1 );
+      // pthread_kill ( tids[1], SIGUSR1 );
 
-      uint64_t end = __rdtsc () + us * i * cycles_by_us;
-      while ( __rdtsc () < end )
-        ;
+      tsc_ends[i] = __rdtsc ();
+
+      uint64_t wait = tsc_ends[i] + us * cycles_by_us;
+      while ( __rdtsc () < wait )
+        __asm__ volatile( "pause" );
     }
 
-  print ( i );
+  worker_stop = 1;
 
-  return 0;
+  for ( unsigned int i = 0; i < RUNS; i++ )
+    samples[i] = tsc_ends[i] - tsc_starts[i];
+
+  print ( samples, "Sender" );
+
+  // for ( unsigned int i = 0; i < RUNS; i++ )
+  //  samples[i] = tsc_worker[i] - tsc_starts[i];
+
+  print ( tsc_worker, "Worker" );
 }
 
 /*
@@ -140,7 +180,6 @@ main ( int argc, char **argv )
     }
 
   num_threads = atoi ( argv[1] );
-  num_threads += ( num_threads == 0 );
 
   us = atoi ( argv[2] );
 
@@ -158,12 +197,15 @@ main ( int argc, char **argv )
            RUNS,
            cycles_by_us );
 
-  pthread_barrier_init ( &barrier, NULL, num_threads );
-
   pthread_t ptids[num_threads];
   for ( int i = 0; i < num_threads; i++ )
-    if ( pthread_create ( &ptids[i], NULL, f1, ( void * ) ( uintptr_t ) i ) )
+    if ( pthread_create ( &ptids[i],
+                          NULL,
+                          worker,
+                          ( void * ) ( uintptr_t ) i + 1 ) )
       return 1;
+
+  sender ( 0 );
 
   for ( int i = 0; i < num_threads; i++ )
     pthread_join ( ptids[i], NULL );

@@ -13,12 +13,14 @@
 
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
-#define DB_PATH "/tmp/my_db"
+#define DFL_DB_PATH "/tmp/my_db"
 #define SAMPLES 10000UL
 
 #define NDEBUG
 
 static rocksdb_t *db;
+
+static uint32_t cycles_by_us;
 
 static uint32_t samples[SAMPLES];
 
@@ -65,22 +67,41 @@ do_scan ( rocksdb_readoptions_t *readoptions )
   rocksdb_iter_destroy ( iter );
 }
 
+static inline double
+cycles2us ( uint32_t cycles )
+{
+  return ( double ) cycles / cycles_by_us;
+}
+
 static void
 print ( char *msg )
 {
   qsort ( samples, SAMPLES, sizeof ( samples[0] ), cmp_uint32 );
+
+  uint32_t min, mean, p99, p999, max;
+  min = samples[0];
+  mean = percentile ( samples, SAMPLES, 0.50f );
+  p99 = percentile ( samples, SAMPLES, 0.99f );
+  p999 = percentile ( samples, SAMPLES, 0.999f );
+  max = samples[SAMPLES - 1];
+
   printf ( "\n%s\n"
-           "  min:  %u\n"
-           "  mean: %u\n"
-           "  99%%: %u\n"
-           "  99.9%%: %u\n"
-           "  max:    %u\n",
+           "  Min:   %u (%.2f us)\n"
+           "  50%%:   %u (%.2f us)\n"
+           "  99%%:   %u (%.2f us)\n"
+           "  99.9%%: %u (%.2f us)\n"
+           "  Max:   %u (%.2f us)\n",
            msg,
-           samples[0],
-           percentile ( samples, SAMPLES, 0.50f ),
-           percentile ( samples, SAMPLES, 0.99f ),
-           percentile ( samples, SAMPLES, 0.999f ),
-           samples[SAMPLES - 1] );
+           min,
+           cycles2us ( min ),
+           mean,
+           cycles2us ( mean ),
+           p99,
+           cycles2us ( p99 ),
+           p999,
+           cycles2us ( p999 ),
+           max,
+           cycles2us ( max ) );
 }
 
 void
@@ -113,12 +134,12 @@ bench ( void )
   print ( "Benchmark SCAN" );
 }
 
-#define DFL_DB_PATH "/tmp/my_db"
-
 int
 main ( int argc, char **argv )
 {
   const char *DBPath = ( argc == 2 ) ? argv[1] : DFL_DB_PATH;
+
+  cycles_by_us = get_tsc_freq () / 1000000UL;
 
   // Initialize RocksDB
   rocksdb_options_t *options = rocksdb_options_create ();
@@ -133,7 +154,7 @@ main ( int argc, char **argv )
   rocksdb_options_increase_parallelism ( options, 0 );
   rocksdb_options_optimize_level_style_compaction ( options, 0 );
   // create the DB if it's not already present
-  rocksdb_options_set_create_if_missing ( options, 1 );
+  // rocksdb_options_set_create_if_missing ( options, 1 );
 
   // open DB
   char *err = NULL;

@@ -7,7 +7,7 @@ LDFLAGS += -pthread
 ROCKS_INCLUDE += ../deps/rocksdb/include
 ROCKS_LDLIBS += ../deps/rocksdb/librocksdb.a -lpthread -lrt -ldl -lz  -ldl
 
-PROGS=signal signal_thread rocksdb
+PROGS=signal signal_thread signal_core rocksdb tsc_hz
 
 .PHONY: all clean
 
