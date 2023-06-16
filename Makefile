@@ -1,4 +1,8 @@
 
+
+#rocksdb database
+DB_PATH=/tmp/my_db
+
 .PHONY: *
 
 all:
@@ -9,6 +13,7 @@ clean:
 
 database:
 	$(MAKE) -C ./database
+	rm -rf $(DB_PATH)
 	./database/create_db
 
 database-clean:
