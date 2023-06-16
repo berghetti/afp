@@ -1,4 +1,6 @@
-obj-m += hello.o
+
+obj-m += kmod_ipi.o
+ccflags-y := -O2
 
 PWD := $(CURDIR)
 

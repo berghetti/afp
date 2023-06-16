@@ -3,6 +3,6 @@
 #define TRAP_H
 
 void
-trap_entry ( int );
+_trap_entry ( void );
 
 #endif

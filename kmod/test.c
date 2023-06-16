@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#include "hello.h"
+#include "kmod_ipi.h"
 #include "trap.h"
 
 static volatile int worker_ready = 0, worker_stop = 2;
@@ -19,21 +19,38 @@ static volatile int worker_ready = 0, worker_stop = 2;
 void
 jmp_for_me ( void )
 {
-  char a[8192] = { 0 };
-  asm volatile( "mov $3, %rax\n\t"
-                "mov $3, %rdi\n\t"
-                "mov $3, %rsi\n\t"
-                "mov $3, %rdx\n\t"
-                "mov $3, %rcx\n\t"
-                "mov $3, %r8\n\t"
-                "mov $3, %r9\n\t"
-                "mov $3, %r10\n\t"
-                "mov $3, %r11\n\t"
-                "mov $3, %rbx\n\t"
-                "mov $3, %r12\n\t"
-                "mov $3, %r13\n\t"
-                "mov $3, %r14\n\t"
-                "mov $3, %r15\n\t" );
+  // clang-format off
+  asm volatile( "mov $3, %%rax;"
+                "mov $3, %%rdi;"
+                "mov $3, %%rsi;"
+                "mov $3, %%rdx;"
+                "mov $3, %%rcx;"
+                "mov $3, %%r8;"
+                "mov $3, %%r9;"
+                "mov $3, %%r10;"
+                "mov $3, %%r11;"
+                "mov $3, %%rbx;"
+                "mov $3, %%r12;"
+                "mov $3, %%r13;"
+                "mov $3, %%r14;"
+                "mov $3, %%r15;"
+                :
+                :
+                : "%rax",
+                  "%rdi",
+                  "%rsi",
+                  "%rdx",
+                  "%rcx",
+                  "%r8",
+                  "%r9",
+                  "%r10",
+                  "%r11",
+                  "%rbx",
+                  "%r12",
+                  "%r13",
+                  "%r14",
+                  "%r15" );
+  // clang-format on
 
   puts ( "Uhul" );
   worker_stop = 1;
@@ -90,32 +107,30 @@ main ( void )
   pthread_attr_setaffinity_np ( &attr, sizeof ( cpu_set_t ), &cpus );
   pthread_create ( &tid, &attr, worker, NULL );
 
-  int fd = open ( DEVICE_PATH, O_RDWR );
+  int fd = open ( KMOD_IPI_PATH, O_RDWR );
   if ( fd < 0 )
     {
-      perror ( "Error to open character " DEVICE_PATH );
+      perror ( "Error to open character " KMOD_IPI_PATH );
       return 1;
     }
 
   while ( !worker_ready )
     ;
 
-  printf ( "%p\n", jmp_for_me );
+  printf ( "%p\n", _trap_entry );
 
-  // int r = ioctl ( fd, KMOD_IPI_SEND, jmp_for_me );
-  int r = ioctl ( fd, KMOD_IPI_SEND, trap_entry );
+  struct req_ipi req = { .core = 1, ._trap_entry = _trap_entry };
+
+  int r = ioctl ( fd, KMOD_IPI_SEND, &req );
   if ( r < 0 )
     {
-      perror ( "Error to send ioctl " DEVICE_PATH );
+      perror ( "Error to send ioctl " KMOD_IPI_PATH );
       return 1;
     }
 
   close ( fd );
 
   pthread_join ( tid, NULL );
-
-  // while ( 1 )
-  //  ;
 
   return 0;
 }
