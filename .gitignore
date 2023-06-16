@@ -2,5 +2,16 @@
 src/build/*
 tags
 
+.gdb*
+*peda*
+
 # binarys
 database/create_db
+tests/signal
+tests/signal_thread
+tests/rocksdb
+tests/tsc_hz
+tests/signal_core
+tests/ipi_core
+
+kmod/test_kmod
