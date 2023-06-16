@@ -7,47 +7,50 @@
  *
  */
 
-#define _GNU_SOURCE  // to CPU_SET
+#define _GNU_SOURCE
 #include <pthread.h>
 #include <sched.h>
-#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 #include <sys/time.h>
 
+//#include <linux/signal.h> /* Definition of SI_* constants */
+#include <sys/syscall.h> /* Definition of SYS_* constants */
+#include <unistd.h>
+#include <signal.h>
 #include <x86intrin.h>
 
 #include "util.h"
 
+#define SENDER_CORE 0
+#define WORKER_CORE 1
+
 #define RUNS 100000UL
-#define MAX_WORKERS 32
 
-static int us;
-static int num_threads;
-static volatile int ready, worker_stop;
-
-static pid_t tids[MAX_WORKERS];
-
-static uint32_t cycles_by_us;
-
+static volatile int worker_ready, worker_stop;
+static uint32_t cycles_by_us, us;
 static uint32_t samples[RUNS];
-static uint32_t tsc_worker[RUNS];
+static uint32_t tsc_worker[RUNS], tsc_sender_worker[RUNS];
 static uint64_t tsc_starts[RUNS], tsc_ends[RUNS];
+static uint64_t volatile sender_start_tsc, worker_start_tsc;
 
-static __thread int worker_id;
-static uint64_t start_tsc;
+static volatile uint32_t i_handler = 0;
 
-static uint32_t i = 0;
+static pid_t worker_id;
+
 static void
 handler ( int sig )
 {
-  // printf ( "Receiver(%u) %llu\n", worker_id, __rdtsc () );
-  tsc_worker[i++] = __rdtsc () - start_tsc;
+  // usleep ( 5 );
+  uint64_t now = __rdtsc ();
+  tsc_sender_worker[i_handler] = now - sender_start_tsc;
+  tsc_worker[i_handler] = now - worker_start_tsc;
+
+  i_handler++;
 }
 
 static inline double
@@ -57,16 +60,16 @@ cycles2us ( uint32_t cycles )
 }
 
 static void
-print ( uint32_t *samples, char *msg )
+print ( uint32_t *samples, size_t size, char *msg )
 {
-  qsort ( samples, RUNS, sizeof ( samples[0] ), cmp_uint32 );
+  qsort ( samples, size, sizeof ( *samples ), cmp_uint32 );
 
   uint32_t min, mean, p99, p999, max;
   min = samples[0];
-  mean = percentile ( samples, RUNS, 0.50f );
-  p99 = percentile ( samples, RUNS, 0.99f );
-  p999 = percentile ( samples, RUNS, 0.999f );
-  max = samples[RUNS - 1];
+  mean = percentile ( samples, size, 0.50f );
+  p99 = percentile ( samples, size, 0.99f );
+  p999 = percentile ( samples, size, 0.999f );
+  max = samples[size - 1];
 
   printf ( "\n%s\n"
            "  Min:   %u (%.2f us)\n"
@@ -90,67 +93,53 @@ print ( uint32_t *samples, char *msg )
 static void *
 worker ( void *arg )
 {
-  worker_id = ( int ) ( uintptr_t ) arg;
-
-  cpu_set_t cpuset;
-  CPU_ZERO ( &cpuset );
-  CPU_SET ( worker_id, &cpuset );
-  if ( pthread_setaffinity_np ( pthread_self (),
-                                sizeof ( cpu_set_t ),
-                                &cpuset ) )
+  cpu_set_t cpus;
+  CPU_ZERO ( &cpus );
+  CPU_SET ( WORKER_CORE, &cpus );
+  if ( pthread_setaffinity_np ( pthread_self (), sizeof ( cpu_set_t ), &cpus ) )
     {
-      fprintf ( stderr,
-                "Error to affinity thread %d to core %d\n",
-                worker_id,
-                worker_id );
+      printf ( "Could not pin thread to core %d.\n", WORKER_CORE );
       exit ( 1 );
     }
 
-  tids[worker_id] = gettid ();
-  // tids[worker_id] = pthread_self ();
-  ready++;
-  printf ( "Started worker thread %u on core %u\n", worker_id, worker_id );
+  printf ( "Started worker thread on core %u\n", WORKER_CORE );
 
+  worker_id = gettid ();
+
+  worker_ready = 1;
   while ( !worker_stop )
-    start_tsc = __rdtsc ();
+    worker_start_tsc = __rdtsc ();
 
-  // print ( samples_worker, "Worker" );
-
-  return 0;
+  return NULL;
 }
 
 static void
-sender ( int i )
+sender ( void )
 {
-  cpu_set_t cpuset;
-  CPU_ZERO ( &cpuset );
-  CPU_SET ( i, &cpuset );
-  if ( pthread_setaffinity_np ( pthread_self (),
-                                sizeof ( cpu_set_t ),
-                                &cpuset ) )
+  cpu_set_t cpus;
+  CPU_ZERO ( &cpus );
+  CPU_SET ( SENDER_CORE, &cpus );
+  if ( pthread_setaffinity_np ( pthread_self (), sizeof ( cpu_set_t ), &cpus ) )
     {
-      fprintf ( stderr, "Error to affinity thread %d to core %d\n", i, i );
+      printf ( "Could not pin thread to core %d.\n", SENDER_CORE );
       exit ( 1 );
     }
 
+  printf ( "Started sender thread on core %u\n", SENDER_CORE );
+
   pid_t tgid = getpid ();
-  while ( ready < num_threads )
-    ;
-
-  printf ( "Started sender thread %u on core %u\n", i, i );
-
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
       tsc_starts[i] = __rdtsc ();
+      sender_start_tsc = tsc_starts[i];
 
-      tgkill ( tgid, tids[1], SIGUSR1 );
-      // pthread_kill ( tids[1], SIGUSR1 );
+      tgkill ( tgid, worker_id, SIGUSR1 );
 
       tsc_ends[i] = __rdtsc ();
 
       uint64_t wait = tsc_ends[i] + us * cycles_by_us;
       while ( __rdtsc () < wait )
-        __asm__ volatile( "pause" );
+        asm volatile( "pause" );
     }
 
   worker_stop = 1;
@@ -158,12 +147,11 @@ sender ( int i )
   for ( unsigned int i = 0; i < RUNS; i++ )
     samples[i] = tsc_ends[i] - tsc_starts[i];
 
-  print ( samples, "Sender" );
+  print ( samples, RUNS, "Sender" );
+  print ( tsc_sender_worker, i_handler, "Sender/Worker" );
+  print ( tsc_worker, i_handler, "Worker" );
 
-  // for ( unsigned int i = 0; i < RUNS; i++ )
-  //  samples[i] = tsc_worker[i] - tsc_starts[i];
-
-  print ( tsc_worker, "Worker" );
+  printf ( "\nSignals handled: %d\n", i_handler );
 }
 
 /*
@@ -173,42 +161,36 @@ sender ( int i )
 int
 main ( int argc, char **argv )
 {
-  if ( argc != 3 )
+  if ( argc != 2 )
     {
-      fprintf ( stderr, "Usage %s num_threads us\n", argv[0] );
+      fprintf ( stderr,
+                "Usage: %s us\n'us' is time between interruptions\n",
+                argv[0] );
       return 1;
     }
 
-  num_threads = atoi ( argv[1] );
-
-  us = atoi ( argv[2] );
-
   cycles_by_us = get_tsc_freq () / 1000000;
+  us = atoi ( argv[1] );
 
-  struct sigaction act = { .sa_handler = handler };
-  sigaction ( SIGUSR1, &act, NULL );
-
-  printf ( "Threads:  %u\n"
-           "Microseconds: %u\n"
+  printf ( "Microseconds: %u\n"
            "Samples: %lu\n"
            "Cycles by us: %u\n",
-           num_threads,
            us,
            RUNS,
            cycles_by_us );
 
-  pthread_t ptids[num_threads];
-  for ( int i = 0; i < num_threads; i++ )
-    if ( pthread_create ( &ptids[i],
-                          NULL,
-                          worker,
-                          ( void * ) ( uintptr_t ) i + 1 ) )
-      return 1;
+  struct sigaction act = { .sa_handler = handler, .sa_flags = SA_NODEFER };
+  sigaction ( SIGUSR1, &act, NULL );
 
-  sender ( 0 );
+  pthread_t tid;
+  pthread_create ( &tid, NULL, worker, NULL );
 
-  for ( int i = 0; i < num_threads; i++ )
-    pthread_join ( ptids[i], NULL );
+  while ( !worker_ready )
+    ;
+
+  sender ();
+
+  pthread_join ( tid, NULL );
 
   return 0;
 }
