@@ -15,3 +15,6 @@ tests/signal_core
 tests/ipi_core
 
 kmod/test_kmod
+kmod/*kmod_ipi.*
+kmod/Module.symvers
+kmod/modules.order
