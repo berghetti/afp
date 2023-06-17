@@ -2,7 +2,6 @@
 /*
  * kernel module to provide IPI interface access from kernel to user level
  * */
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/printk.h>
@@ -10,10 +9,14 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/sched.h>
-#include <linux/sched/task_stack.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 #include <asm/processor.h>
 #include <asm/current.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION( 5, 0, 0 )
+#include <linux/sched/task_stack.h>  // dependency to task_pt_regs
+#endif
 
 #include "kmod_ipi.h"
 
