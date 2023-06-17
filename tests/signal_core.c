@@ -18,11 +18,17 @@
 #include <time.h>
 #include <sys/time.h>
 
-//#include <linux/signal.h> /* Definition of SI_* constants */
 #include <sys/syscall.h> /* Definition of SYS_* constants */
 #include <unistd.h>
 #include <signal.h>
 #include <x86intrin.h>
+
+#include <sys/syscall.h>
+
+#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
+#define gettid() syscall ( SYS_gettid )
+#define tgkill( pid, tid, sig ) syscall ( SYS_tgkill, pid, tid, sig )
+#endif
 
 #include "util.h"
 
@@ -32,11 +38,13 @@
 #define RUNS 100000UL
 
 static volatile int worker_ready, worker_stop;
-static uint32_t cycles_by_us, us;
+static uint32_t cycles_by_us;
 static uint32_t samples[RUNS];
 static uint32_t tsc_worker[RUNS], tsc_sender_worker[RUNS];
 static uint64_t tsc_starts[RUNS], tsc_ends[RUNS];
 static uint64_t volatile sender_start_tsc, worker_start_tsc;
+
+static volatile int wait_handler = 1;
 
 static volatile uint32_t i_handler = 0;
 
@@ -51,6 +59,8 @@ handler ( int sig )
   tsc_worker[i_handler] = now - worker_start_tsc;
 
   i_handler++;
+
+  wait_handler = 0;
 }
 
 static inline double
@@ -128,6 +138,8 @@ sender ( void )
   printf ( "Started sender thread on core %u\n", SENDER_CORE );
 
   pid_t tgid = getpid ();
+
+  uint64_t end, start = __rdtsc ();
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
       tsc_starts[i] = __rdtsc ();
@@ -137,10 +149,15 @@ sender ( void )
 
       tsc_ends[i] = __rdtsc ();
 
-      uint64_t wait = tsc_ends[i] + us * cycles_by_us;
-      while ( __rdtsc () < wait )
+      while ( wait_handler )
         asm volatile( "pause" );
+
+      wait_handler = 1;
     }
+  end = __rdtsc ();
+
+  uint64_t avg = ( end - start ) / RUNS;
+  printf ( "Average: %lu (%.2f us)", avg, cycles2us ( avg ) );
 
   worker_stop = 1;
 
@@ -161,21 +178,10 @@ sender ( void )
 int
 main ( int argc, char **argv )
 {
-  if ( argc != 2 )
-    {
-      fprintf ( stderr,
-                "Usage: %s us\n'us' is time between interruptions\n",
-                argv[0] );
-      return 1;
-    }
-
   cycles_by_us = get_tsc_freq () / 1000000;
-  us = atoi ( argv[1] );
 
-  printf ( "Microseconds: %u\n"
-           "Samples: %lu\n"
+  printf ( "Samples: %lu\n"
            "Cycles by us: %u\n",
-           us,
            RUNS,
            cycles_by_us );
 

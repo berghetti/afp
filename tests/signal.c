@@ -13,7 +13,13 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <sys/syscall.h>
+
+#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
+#define gettid() syscall ( SYS_gettid )
+#define tgkill( pid, tid, sig ) syscall ( SYS_tgkill, pid, tid, sig )
+#endif
 
 #include <x86intrin.h>
 
