@@ -4,3 +4,6 @@
 [submodule "deps/rocksdb"]
 	path = deps/rocksdb
 	url = https://github.com/facebook/rocksdb.git
+[submodule "deps/dune"]
+	path = deps/dune
+	url = https://github.com/project-dune/dune.git
