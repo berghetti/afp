@@ -15,14 +15,14 @@
 #include "trap.h"
 #include "kmod_ipi.h"
 
-#define SENDER_CORE 0
-#define WORKER_CORE 1
+// ensure not using hyperthreads of same core
+#define SENDER_CORE 5
+#define WORKER_CORE 7
 
 #define RUNS 100000UL
 
 static volatile int worker_ready, worker_stop;
-static uint32_t cycles_by_us;
-static uint32_t samples[RUNS];
+static uint32_t samples[RUNS], timer_frequency[RUNS];
 static uint32_t tsc_worker[RUNS], tsc_sender_worker[RUNS];
 static uint64_t tsc_starts[RUNS], tsc_ends[RUNS];
 static uint64_t volatile sender_start_tsc, worker_start_tsc;
@@ -34,66 +34,25 @@ static volatile uint32_t i_handler = 0;
 void
 jmp_for_me ( void )
 {
-  // usleep ( 5 );
+  static uint64_t last_now = 0;
   uint64_t now = __rdtsc ();
+
   tsc_sender_worker[i_handler] = now - sender_start_tsc;
   tsc_worker[i_handler] = now - worker_start_tsc;
+
+  timer_frequency[i_handler] = now - last_now;
+  last_now = now;
 
   i_handler++;
 
   wait_handler = 0;
 }
 
-static inline double
-cycles2us ( uint32_t cycles )
-{
-  return ( double ) cycles / cycles_by_us;
-}
-
-static void
-print ( uint32_t *samples, size_t size, char *msg )
-{
-  qsort ( samples, size, sizeof ( *samples ), cmp_uint32 );
-
-  uint32_t min, mean, p99, p999, max;
-  min = samples[0];
-  mean = percentile ( samples, size, 0.50f );
-  p99 = percentile ( samples, size, 0.99f );
-  p999 = percentile ( samples, size, 0.999f );
-  max = samples[size - 1];
-
-  printf ( "\n%s\n"
-           "  Min:   %u (%.2f us)\n"
-           "  50%%:   %u (%.2f us)\n"
-           "  99%%:   %u (%.2f us)\n"
-           "  99.9%%: %u (%.2f us)\n"
-           "  Max:   %u (%.2f us)\n",
-           msg,
-           min,
-           cycles2us ( min ),
-           mean,
-           cycles2us ( mean ),
-           p99,
-           cycles2us ( p99 ),
-           p999,
-           cycles2us ( p999 ),
-           max,
-           cycles2us ( max ) );
-}
-
 void *
 worker ( void *arg )
 {
-  cpu_set_t cpus;
-  CPU_ZERO ( &cpus );
-  CPU_SET ( WORKER_CORE, &cpus );
-  if ( pthread_setaffinity_np ( pthread_self (), sizeof ( cpu_set_t ), &cpus ) )
-    {
-      printf ( "Could not pin thread to core %d.\n", WORKER_CORE );
-      exit ( 1 );
-    }
-
-  printf ( "Started worker thread on core %u\n", WORKER_CORE );
+  pin_to_cpu ( WORKER_CORE );
+  printf ( "Started worker thread on core %u\n", sched_getcpu () );
 
   worker_ready = 1;
   while ( !worker_stop )
@@ -105,20 +64,11 @@ worker ( void *arg )
 static void
 sender ( int fd )
 {
-  cpu_set_t cpus;
-  CPU_ZERO ( &cpus );
-  CPU_SET ( SENDER_CORE, &cpus );
-  if ( pthread_setaffinity_np ( pthread_self (), sizeof ( cpu_set_t ), &cpus ) )
-    {
-      printf ( "Could not pin thread to core %d.\n", SENDER_CORE );
-      exit ( 1 );
-    }
+  pin_to_cpu ( SENDER_CORE );
+  printf ( "Started sender thread on core %u\n", sched_getcpu () );
 
-  printf ( "Started sender thread on core %u\n", SENDER_CORE );
+  struct req_ipi req = { .core = WORKER_CORE, ._trap_entry = _trap_entry };
 
-  struct req_ipi req = { .core = 1, ._trap_entry = _trap_entry };
-
-  uint64_t end, start = __rdtsc ();
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
       tsc_starts[i] = __rdtsc ();
@@ -133,27 +83,22 @@ sender ( int fd )
 
       wait_handler = 1;
     }
-  end = __rdtsc ();
-
-  uint64_t avg = ( end - start ) / RUNS;
-  printf ( "Average: %lu (%.2f us)", avg, cycles2us ( avg ) );
 
   worker_stop = 1;
 
   for ( unsigned int i = 0; i < RUNS; i++ )
     samples[i] = tsc_ends[i] - tsc_starts[i];
 
-  print ( samples, RUNS, "Sender" );
-  print ( tsc_sender_worker, i_handler, "Sender/Worker" );
-  print ( tsc_worker, i_handler, "Worker" );
-
-  printf ( "\nIPIs handled: %d\n", i_handler );
+  print ( samples, RUNS, "Sender", 0 );
+  print ( tsc_sender_worker, i_handler, "Sender/Worker", 0 );
+  print ( tsc_worker, i_handler, "Worker", 0 );
+  print ( timer_frequency, RUNS, "Timer frequency", 1 );
 }
 
 int
 main ( int argc, char **argv )
 {
-  cycles_by_us = get_tsc_freq () / 1000000;
+  init_util ();
 
   printf ( "Samples: %lu\n"
            "Cycles by us: %u\n",
@@ -174,8 +119,9 @@ main ( int argc, char **argv )
     ;
 
   sender ( fd );
+  close ( fd );
   pthread_join ( tid, NULL );
 
-  close ( fd );
+  printf ( "\nIPIs handled: %d\n", i_handler );
   return 0;
 }
