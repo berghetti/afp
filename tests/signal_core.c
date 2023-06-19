@@ -30,10 +30,10 @@
 #define RUNS 100000UL
 
 static volatile int worker_ready, worker_stop;
-static uint32_t cycles_by_us;
-static uint32_t samples[RUNS], timer_frequency[RUNS];
+
+static uint32_t tsc_sender[RUNS], timer_frequency[RUNS];
 static uint32_t tsc_worker[RUNS], tsc_sender_worker[RUNS];
-static uint64_t tsc_starts[RUNS], tsc_ends[RUNS];
+
 static uint64_t volatile sender_start_tsc, worker_start_tsc;
 
 static volatile int wait_handler = 1;
@@ -81,15 +81,16 @@ sender ( void )
   printf ( "Started sender thread on core %u\n", sched_getcpu () );
 
   pid_t tgid = getpid ();
+  uint64_t now;
 
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
-      tsc_starts[i] = __rdtsc ();
-      sender_start_tsc = tsc_starts[i];
+      now = __rdtsc ();
+      sender_start_tsc = now;
 
       tgkill ( tgid, worker_id, SIGUSR1 );
 
-      tsc_ends[i] = __rdtsc ();
+      tsc_sender[i] = __rdtsc () - now;
 
       while ( wait_handler )
         asm volatile( "pause" );
@@ -99,12 +100,9 @@ sender ( void )
 
   worker_stop = 1;
 
-  for ( unsigned int i = 0; i < RUNS; i++ )
-    samples[i] = tsc_ends[i] - tsc_starts[i];
-
-  print ( samples, RUNS, "Sender", 0 );
-  print ( tsc_sender_worker, i_handler, "Sender/Worker", 0 );
-  print ( tsc_worker, i_handler, "Worker", 0 );
+  print ( tsc_sender, RUNS, "Sender", 0 );
+  print ( tsc_sender_worker, RUNS, "Sender/Worker", 0 );
+  print ( tsc_worker, RUNS, "Worker", 0 );
   print ( timer_frequency, RUNS, "Timer frequency", 1 );
 }
 

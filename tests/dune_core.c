@@ -1,4 +1,3 @@
-
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdint.h>
@@ -9,17 +8,21 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sched.h>
 #include <x86intrin.h>
 
 #include "util.h"
-#include "trap.h"
-#include "kmod_ipi.h"
 
-// ensure not using hyperthreads of same core
-#define SENDER_CORE 5
-#define WORKER_CORE 7
+#include "libdune/dune.h"
+#include "libdune/cpu-x86.h"
+#include "libdune/local.h"
+
+#define SENDER_CORE 0
+#define WORKER_CORE 1
 
 #define RUNS 100000UL
+
+#define TEST_VECTOR 0xf2
 
 static volatile int worker_ready, worker_stop;
 
@@ -32,8 +35,8 @@ static volatile int wait_handler = 1;
 
 static volatile uint32_t i_handler = 0;
 
-void
-jmp_for_me ( void )
+static void
+jmp_for_me ( struct dune_tf *tf )
 {
   static uint64_t last_now = 0;
   uint64_t now = __rdtsc ();
@@ -46,6 +49,7 @@ jmp_for_me ( void )
 
   i_handler++;
 
+  dune_apic_eoi ();
   wait_handler = 0;
 }
 
@@ -55,6 +59,18 @@ worker ( void *arg )
   pin_to_cpu ( WORKER_CORE );
   printf ( "Started worker thread on core %u\n", sched_getcpu () );
 
+  volatile int ret = dune_enter ();
+  if ( ret )
+    {
+      fprintf ( stderr, "failed to enter dune in thread 2\n" );
+      exit ( 1 );
+    }
+
+  dune_apic_init_rt_entry ();
+  dune_register_intr_handler ( TEST_VECTOR, jmp_for_me );
+  asm volatile( "mfence" ::: "memory" );
+
+  worker_start_tsc = __rdtsc ();
   worker_ready = 1;
   while ( !worker_stop )
     worker_start_tsc = __rdtsc ();
@@ -63,20 +79,20 @@ worker ( void *arg )
 }
 
 static void
-sender ( int fd )
+sender ( void )
 {
   pin_to_cpu ( SENDER_CORE );
   printf ( "Started sender thread on core %u\n", sched_getcpu () );
 
   uint64_t now;
-  struct req_ipi req = { .core = WORKER_CORE, ._trap_entry = _trap_entry };
 
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
       now = __rdtsc ();
       sender_start_tsc = now;
 
-      ioctl ( fd, KMOD_IPI_SEND, &req );
+      dune_apic_send_ipi ( TEST_VECTOR,
+                           dune_apic_id_for_cpu ( WORKER_CORE, NULL ) );
 
       tsc_sender[i] = __rdtsc () - now;
 
@@ -88,10 +104,10 @@ sender ( int fd )
 
   worker_stop = 1;
 
-  print ( tsc_sender, RUNS, "Sender", 0 );
-  print ( tsc_sender_worker, i_handler, "Sender/Worker", 0 );
-  print ( tsc_worker, i_handler, "Worker", 0 );
-  print ( timer_frequency, RUNS, "Timer frequency", 1 );
+  print ( tsc_sender_worker, RUNS, "Sender", 0 );
+  print ( tsc_sender_worker, RUNS, "Sender/Worker", 0 );
+  print ( tsc_worker, RUNS, "Worker", 0 );
+  print ( timer_frequency, RUNS, "Worker", 1 );
 }
 
 int
@@ -104,12 +120,14 @@ main ( int argc, char **argv )
            RUNS,
            cycles_by_us );
 
-  int fd = open ( KMOD_IPI_PATH, O_RDWR );
-  if ( fd < 0 )
+  volatile int ret = dune_init_and_enter ();
+  if ( ret )
     {
-      perror ( "Error to open character " KMOD_IPI_PATH );
-      return 1;
+      fprintf ( stderr, "failed to initialize dune\n" );
+      return ret;
     }
+
+  dune_apic_init_rt_entry ();
 
   pthread_t tid;
   pthread_create ( &tid, NULL, worker, NULL );
@@ -117,10 +135,10 @@ main ( int argc, char **argv )
   while ( !worker_ready )
     ;
 
-  sender ( fd );
-  close ( fd );
-  pthread_join ( tid, NULL );
+  sender ();
 
-  printf ( "\nIPIs handled: %d\n", i_handler );
+  pthread_join ( tid, NULL );
+  printf ( "\nDUNE IPIs handled: %d\n", i_handler );
+
   return 0;
 }

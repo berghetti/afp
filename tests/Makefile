@@ -5,13 +5,13 @@ LDFLAGS += -pthread
 
 PROGS= signal signal_thread signal_core ipi_core hrtimer tsc_hz
 PROGS+= rocksdb
-PROGS+= dune_ipi_core
+PROGS+= dune_core
 
 ROCKS_DIR=../deps/rocksdb
 ROCKS_INCLUDE += $(ROCKS_DIR)/include
 ROCKS_LDLIBS += $(ROCKS_DIR)/librocksdb.a -lpthread -lrt -ldl -lz  -ldl
 
-DUNE_DIR=/home/user/dune
+DUNE_DIR=../deps/dune
 DUNE_INCLUDE= $(DUNE_DIR)
 DUNE_LDLIBS= -static -L $(DUNE_DIR)/libdune -ldune
 
@@ -34,7 +34,7 @@ ipi_core: ipi_core.o trap.o
 hrtimer: hrtimer.o trap.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
-dune_ipi_core: dune_ipi_core.o
+dune_core: dune_core.o
 	$(CC) $^ -o $@ $(CFLAGS) $(DUNE_LDLIBS) $(DUNE_LDLIBS) -pthread
 
 trap.o: ../kmod/trap.S
