@@ -5,11 +5,22 @@ tags
 .gdb*
 *peda*
 
-#not ignore
-!*/*.c
-!*/*.h
-!*/Makefile
+database/*
+!database/*.c
+!datakmod/*.h
+!datakmod/*.sh
+!datakmod/Makefile
 
-#ignore all
-*
+tests/*
+!tests/*.c
+!tests/*.h
+!tests/*.sh
+!tests/Makefile
+
+kmod/*
+kmod/*.mod*
+#!kmod/*.c
+#!kmod/*.h
+#!kmod/*.sh
+#!kmod/Makefile
 

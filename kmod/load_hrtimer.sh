@@ -1,8 +1,8 @@
 #!/bin/bash
 
-ROOT_PATH=$(dirname $0)"/../kmod/"
+ROOT_PATH=$(dirname $0)"/../kmod"
 
-#module name
+# module name
 MOD=kmod_hrtimer
 
 pushd $ROOT_PATH

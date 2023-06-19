@@ -24,4 +24,3 @@ trap.o: trap.S
 clean:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 	find ./ -iname *.o -delete
-	find ./ -type f -executable -delete
