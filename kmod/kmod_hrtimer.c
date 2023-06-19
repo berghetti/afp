@@ -1,7 +1,9 @@
 
 /*
- * kernel module to provide IPI interface access from kernel to user level
+ * kernel module to interrupt tasks using hrtimer and specialized
+ * trampoline
  * */
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/printk.h>
@@ -158,4 +160,5 @@ module_init ( kmod_start );
 module_exit ( kmod_exit );
 
 MODULE_LICENSE ( "GPL" );
-MODULE_DESCRIPTION ( "Provide IPI access interface from kernel to user level" );
+MODULE_DESCRIPTION (
+        "Interrupt tasks using specialized trampoline with hrtimer" );
