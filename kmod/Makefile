@@ -1,14 +1,21 @@
 
 obj-m += kmod_ipi.o
+obj-m += kmod_hrtimer.o
 ccflags-y := -O2
 
 PWD := $(CURDIR)
 
+.PHONY: all tests clean
 
 all:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 
+tests: test_kmod test_kmod_hrtimer
+
 test_kmod: test_kmod.o trap.o
+	$(CC) $(CFLAGS) -o $@ $^ -pthread -O2 -Wall -Wextra
+
+test_kmod_hrtimer: test_kmod_hrtimer.o trap.o
 	$(CC) $(CFLAGS) -o $@ $^ -pthread -O2 -Wall -Wextra
 
 trap.o: trap.S
