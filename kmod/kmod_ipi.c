@@ -15,25 +15,29 @@
 #include <asm/current.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION( 5, 0, 0 )
-#include <linux/sched/task_stack.h>  // dependency to task_pt_regs
+#include <linux/sched/task_stack.h> /* dependency to task_pt_regs */
 #endif
 
 #include "kmod_ipi.h"
 
 static void
-ipi ( void __user *arg )
+trampoline ( void __user *arg )
 {
   struct pt_regs *regs;
+
+  /* WARNNING: we assume current task is our application running on exclusive
+   * core
+   */
   regs = task_pt_regs ( current );
 
-  // pr_info ( "trap entry %lx\n", ( unsigned long ) arg );
-  // reserve space on user stack to put EIP
+  /* reserve space on user stack to save EIP */
   regs->sp -= 8;
 
-  // save EIP in user stack (RSP)
+  /* save EIP in user stack (RSP) */
   copy_to_user ( ( unsigned long * ) regs->sp, &regs->ip, sizeof ( regs->ip ) );
 
-  // change EIP to when return from kernel go to handler defined in user space
+  /* change EIP to when return from kernel go to handler defined in user space
+   */
   regs->ip = ( unsigned long ) arg;
 }
 
@@ -43,7 +47,7 @@ kmod_ioctl ( struct file *filp, unsigned int cmd, unsigned long arg )
   struct req_ipi req;
   copy_from_user ( &req, ( void __user * ) arg, sizeof ( req ) );
 
-  smp_call_function_single ( req.core, ipi, req._trap_entry, 0 );
+  smp_call_function_single ( req.core, trampoline, req._trap_entry, 0 );
 
   return 0;
 }

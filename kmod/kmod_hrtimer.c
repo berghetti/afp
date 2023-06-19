@@ -32,8 +32,8 @@
 
 #define TIMER_MODE HRTIMER_MODE_REL_HARD
 
-// timer interval in ns (15us)
-#define INTERVAL 15 * 1000
+// timer interval in ns (20us)
+#define INTERVAL 20 * 1000
 
 static struct hrtimer timer;
 static ktime_t interval;
