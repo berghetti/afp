@@ -5,16 +5,11 @@ tags
 .gdb*
 *peda*
 
-# binarys
-database/create_db
-tests/signal
-tests/signal_thread
-tests/rocksdb
-tests/tsc_hz
-tests/signal_core
-tests/ipi_core
+#not ignore
+!*/*.c
+!*/*.h
+!*/Makefile
 
-kmod/test_kmod
-kmod/*kmod_ipi.*
-kmod/Module.symvers
-kmod/modules.order
+#ignore all
+*
+

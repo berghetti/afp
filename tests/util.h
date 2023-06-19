@@ -20,7 +20,6 @@ percentile ( uint32_t *buff, size_t len, float percentile )
 }
 
 #define NS_PER_SEC 1E9
-#define CYC_PER_10MHZ 1E7
 
 // return amount cycles by second
 uint64_t
