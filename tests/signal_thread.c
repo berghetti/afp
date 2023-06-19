@@ -33,61 +33,19 @@
 
 #define RUNS 100000UL
 
-static int us;
 static int num_threads;
-static int ready;
-
-static uint32_t cycles_by_us;
-
-static struct timespec start;
+static int us;
 
 static pthread_barrier_t barrier;
 
-static __thread volatile uint64_t ts;
+static __thread volatile uint64_t tsc_start;
 static __thread uint32_t samples[RUNS];
 
 static void
 handler ( int sig )
 {
   static __thread uint64_t i = 0;
-  samples[i++] = __rdtsc () - ts;
-}
-
-static inline double
-cycles2us ( uint32_t cycles )
-{
-  return ( double ) cycles / cycles_by_us;
-}
-
-static void
-print ( int thread_id )
-{
-  qsort ( samples, RUNS, sizeof ( samples[0] ), cmp_uint32 );
-
-  uint32_t min, mean, p99, p999, max;
-  min = samples[0];
-  mean = percentile ( samples, RUNS, 0.50f );
-  p99 = percentile ( samples, RUNS, 0.99f );
-  p999 = percentile ( samples, RUNS, 0.999f );
-  max = samples[RUNS - 1];
-
-  printf ( "\nThread %d\n"
-           "  Min:   %u (%.2f us)\n"
-           "  Mean:  %u (%.2f us)\n"
-           "  99%%:   %u (%.2f us)\n"
-           "  99.9%%: %u (%.2f us)\n"
-           "  Max:   %u (%.2f us)\n",
-           thread_id,
-           min,
-           cycles2us ( min ),
-           mean,
-           cycles2us ( mean ),
-           p99,
-           cycles2us ( p99 ),
-           p999,
-           cycles2us ( p999 ),
-           max,
-           cycles2us ( max ) );
+  samples[i++] = __rdtsc () - tsc_start;
 }
 
 static void *
@@ -95,38 +53,31 @@ f1 ( void *arg )
 {
   int i = ( int ) ( uintptr_t ) arg;
 
-  cpu_set_t cpuset;
-  CPU_ZERO ( &cpuset );
-  CPU_SET ( i, &cpuset );
-  if ( pthread_setaffinity_np ( pthread_self (),
-                                sizeof ( cpu_set_t ),
-                                &cpuset ) )
-    {
-      fprintf ( stderr, "Error to affinity thread %d to core %d\n", i, i );
-      exit ( 1 );
-    }
+  pin_to_cpu ( i );
 
   pid_t tgid = getpid ();
   pid_t tid = gettid ();
-  struct timespec now;
+
   uint64_t end;
 
   uint64_t count = RUNS;
   // First execution not await others threads. Assume as warm up.
   while ( count-- )
     {
-      ts = __rdtsc ();
+      tsc_start = __rdtsc ();
       tgkill ( tgid, tid, SIGUSR1 );
 
       // ensure specific misalign between threads start
       pthread_barrier_wait ( &barrier );
 
-      uint64_t end = __rdtsc () + us * i * cycles_by_us;
+      end = __rdtsc () + us * i * cycles_by_us;
       while ( __rdtsc () < end )
         ;
     }
 
-  print ( i );
+  char buff[14];
+  snprintf ( buff, sizeof ( buff ), "Thread %u", i );
+  print ( samples, RUNS, buff, 0 );
 
   return 0;
 }
@@ -144,12 +95,12 @@ main ( int argc, char **argv )
       return 1;
     }
 
+  init_util ();
+
   num_threads = atoi ( argv[1] );
   num_threads += ( num_threads == 0 );
 
   us = atoi ( argv[2] );
-
-  cycles_by_us = get_tsc_freq () / 1000000;
 
   struct sigaction act = { .sa_handler = handler };
   sigaction ( SIGUSR1, &act, NULL );
