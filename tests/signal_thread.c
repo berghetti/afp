@@ -75,9 +75,9 @@ f1 ( void *arg )
         ;
     }
 
-  char buff[14];
-  snprintf ( buff, sizeof ( buff ), "Thread %u", i );
-  print ( samples, RUNS, buff, 0 );
+  char msg[16];
+  snprintf ( msg, sizeof ( msg ), "Thread %u", i );
+  print ( samples, RUNS, msg, 0 );
 
   return 0;
 }

@@ -16,8 +16,8 @@
 #include "kmod_ipi.h"
 
 // ensure not using hyperthreads of same core
-#define SENDER_CORE 5
-#define WORKER_CORE 7
+#define SENDER_CORE 7
+#define WORKER_CORE 0
 
 #define RUNS 100000UL
 

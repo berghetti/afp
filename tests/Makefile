@@ -3,7 +3,8 @@ CFLAGS +=-Wall -Wextra -ggdb -O2
 
 LDFLAGS += -pthread
 
-PROGS= signal signal_thread signal_core ipi_core hrtimer tsc_hz
+PROGS= signal signal_thread signal_core signal_multthread
+PROGS+= ipi_core ipi_multthread hrtimer tsc_hz
 PROGS+= rocksdb
 PROGS+= dune_core
 
@@ -29,6 +30,9 @@ rocksdb: rocksdb.o
 	$(CXX) $^ -o $@ $(ROCKS_LDLIBS) $(CFLAGS)
 
 ipi_core: ipi_core.o trap.o
+	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
+
+ipi_multthread: ipi_multthread.o trap.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 hrtimer: hrtimer.o trap.o
