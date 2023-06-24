@@ -24,6 +24,9 @@
 /* return code */
 #define RAX	(64)
 
+#define FLAGS (72)
+
+/* not considering flag register here */
 #define CLOBBERED_COUNT 9
 #define RESERVE CLOBBERED_COUNT * 8
 
@@ -54,7 +57,14 @@ RSP		 stack pointer
 .globl _trap_entry
 .type _trap_entry, @function
 _trap_entry:
-  // allocate space on stack to save clobbered registers
+  pushq %rbp
+  movq %rsp, %rbp
+
+  /* save flag register.
+     save low 16 bits from flags register on stack */
+  pushf
+
+  /* allocate space on stack to save clobbered registers */
   subq $RESERVE, %rsp
 
   /* save callee-clobbered registers */
@@ -68,6 +78,7 @@ _trap_entry:
   movq %r10, R10(%rsp)
   movq %r11, R11(%rsp)
 
+  /* call we interrupt handler */
   call jmp_for_me
 
   /* restore callee-clobbered registers */
@@ -75,13 +86,27 @@ _trap_entry:
   movq RSI(%rsp), %rsi
   movq RDX(%rsp), %rdx
   movq RCX(%rsp), %rcx
-  movq RAX(%rsp), %rax
+  /* movq RAX(%rsp), %rax */
   movq R8(%rsp), %r8
   movq R9(%rsp), %r9
   movq R10(%rsp), %r10
   movq R11(%rsp), %r11
 
-  addq $RESERVE, %rsp
-  // in kernel module we put return address to thread app on stack
+  /* restore flag register.
+     load flags values from stack, save by pushf, to AH register and
+     load AH to flags register, using sahf.
+     Could using popf, but popf is look slow
+     (https://www.agner.org/optimize/instruction_tables.pdf).*/
+  mov FLAGS(%rsp), %ah
+  sahf
+
+  /* finally restore rax */
+  movq RAX(%rsp), %rax
+
+  /* using leave to release stack frame because leave not affect flags register
+     as "addq $RESERVE+8, %rsp" */
+  leave
+
+  /* in kernel module we put return address to thread app on stack */
   ret
 
