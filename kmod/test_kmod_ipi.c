@@ -17,7 +17,7 @@
 static volatile int worker_ready = 0, worker_stop = 2;
 
 void
-jmp_for_me ( void )
+interrupt_handler ( void )
 {
   // clang-format off
   asm volatile( "mov $3, %%rax;"
