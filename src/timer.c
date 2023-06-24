@@ -8,8 +8,7 @@
 #include "debug.h"
 #include "afp_internal.h"
 
-#define MISSALIGN 5  // interval between workes interruptions in us
-#define QUANTUM 5    // in us
+#define QUANTUM 5  // in us
 
 static uint64_t workers_alarm[MAX_WORKERS];
 
@@ -35,15 +34,14 @@ void
 timer_main ( uint16_t tot_workers )
 {
 
-  DEBUG ( "Core %u on timer management\n", rte_lcore_id () );
+  INFO ( "Starting timer management on core %u\n", rte_lcore_id () );
 
   uint64_t cycles_per_us = rte_get_tsc_hz () / 1000000UL;
   INFO ( "Cycles per us: %lu\n", cycles_per_us );
 
   uint64_t quantum = QUANTUM * cycles_per_us;
-  uint64_t missalign = MISSALIGN * cycles_per_us;
 
-  uint64_t min, wait, last_sent = 0;
+  uint64_t min, wait;
   uint16_t worker;
   while ( 1 )
     {
@@ -62,8 +60,7 @@ timer_main ( uint16_t tot_workers )
       if ( min == UINT64_MAX )
         continue;
 
-      // wait at least MISSALIGN interrupt between workers
-      wait = RTE_MAX ( missalign + last_sent, quantum + min );
+      wait = quantum + min;
 
       while ( rte_get_tsc_cycles () < wait )
         cpu_relax ();
@@ -71,7 +68,6 @@ timer_main ( uint16_t tot_workers )
       // worker not disarm alarm?
       if ( workers_alarm[worker] != UINT64_MAX )
         {
-          last_sent = rte_get_tsc_cycles ();
           workers_alarm[worker] = UINT64_MAX;
 
           // DEBUG ( "%lu: Send interrupt to worker %u\n", last_sent, worker );

@@ -11,6 +11,7 @@
 #include "interrupt.h"
 #include "timer.h"
 #include "compiler.h"
+#include "afp_internal.h"
 
 static uint16_t port_id;
 // static struct rte_mempool *pkt_pool;
@@ -19,8 +20,6 @@ static struct rte_ether_addr my_ether;
 // TODO: add this to a header file
 extern void __noreturn
 exit_to_context ( void * );
-
-#define BURST_SIZE 32
 
 #define SWAP( a, b )           \
   ( {                          \
@@ -94,8 +93,6 @@ work_stealing ( struct queue *my, struct queue *remote )
   if ( size )
     {
       size = div_up ( size, 2 );
-
-      DEBUG ( "Stealing %u packets\n", size );
       queue_stealing ( my, remote, size );
     }
 
@@ -106,24 +103,26 @@ work_stealing ( struct queue *my, struct queue *remote )
 bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
 {
-  if ( !queue_is_empty ( rxq ) )
-    return true;
+  unsigned count = queue_count ( rxq );
 
-  struct rte_mbuf *pkts[BURST_SIZE];
-  uint16_t nb_rx;
-
-  nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
-  if ( nb_rx )
+  // try keep rxq full
+  if ( count < QUEUE_SIZE - BURST_SIZE )
     {
-      // DEBUG ( "Queue %u received %u packets\n", ctx->queue, nb_rx );
-      // DEBUG ( "Worker %u received %u packets\n", ctx->worker_id, nb_rx );
-      if ( !queue_enqueue_bulk ( rxq, ( void ** ) pkts, nb_rx ) )
-        FATAL ( "%s\n", "Error enqueue bulk" );
+      struct rte_mbuf *pkts[BURST_SIZE];
+      uint16_t nb_rx;
 
-      return true;
+      nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
+      if ( nb_rx )
+        {
+          // DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
+          if ( !queue_enqueue_bulk ( rxq, ( void ** ) pkts, nb_rx ) )
+            FATAL ( "%s\n", "Error enqueue bulk" );
+
+          return true;
+        }
     }
 
-  return false;
+  return ( count != 0 );
 }
 
 size_t
@@ -131,7 +130,7 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 {
   struct rte_mbuf *pkt;
   queue_lock ( ctx->rxq );
-  DEBUG ( "Worker: %u\n", ctx->worker_id );
+  // DEBUG ( "Worker: %u\n", ctx->worker_id );
   while ( 1 )
     {
       if ( has_work_in_queues ( ctx->rxq, ctx->hwq ) )
@@ -152,9 +151,6 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
           if ( ctx->worker_id == remote_worker )
             continue;
 
-          // DEBUG ( "Worker %u try stealing from %u\n",
-          //        ctx->worker_id,
-          //        remote_worker );
           if ( work_stealing ( ctx->rxq, &ctx->rxqs[remote_worker] ) )
             {
               DEBUG ( "Worker %u stealead %u packtes from worker %u\n",

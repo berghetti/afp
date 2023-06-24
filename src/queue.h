@@ -8,13 +8,13 @@
 #include <rte_branch_prediction.h>
 
 #include "compiler.h"
+#include "afp_internal.h"
 
 /*
  * Ring queue FIFO.
  * Usable size is QUEUE_SIZE - 1.
  */
 
-#define QUEUE_SIZE 64  // keep this a power of two
 #define MASK ( QUEUE_SIZE - 1 )
 
 struct queue

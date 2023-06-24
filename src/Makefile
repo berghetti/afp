@@ -13,8 +13,8 @@ ifneq ($(shell $(PKGCONF) --exists libdpdk && echo 0),0)
 $(error "no installation of DPDK found")
 endif
 
-#CFLAGS += -O3 -Wall -Wextra
-CFLAGS += -O0 -ggdb -Wall -Wextra
+CFLAGS += -O3 -Wall -Wextra -DNDEBUG
+#CFLAGS += -O0 -ggdb -Wall -Wextra
 CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
 LDLIBS = $(shell $(PKGCONF) --libs libdpdk)
 

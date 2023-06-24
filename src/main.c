@@ -32,15 +32,57 @@ static __thread ucontext_t *worker_app_ctx;
 static __thread ucontext_t *tmp_long_ctx = NULL;
 
 // simule application code...
+// void
+// app ( afp_ctx_t *ctx )
+//{
+//  void *data;
+//  uint16_t len;
+//  struct sock sock;
+//
+//  char s[] = "Short response!\n";
+//  char l[] = "LONG response!\n";
+//
+//  size_t t;
+//  while ( 1 )
+//    {
+//      if ( !( t = afp_recv ( ctx, &data, &len, &sock ) ) )
+//        continue;
+//
+//      if ( !strcmp ( data, "LONG\n" ) )
+//        {
+//          int i = 50;
+//          DEBUG ( "Worker %u received long request\n", worker_id );
+//          afp_send_feedback ( ctx, START_LONG );
+//          while ( i-- )
+//            {
+//              int j = 100000000UL;
+//              while ( j-- )
+//                ;
+//              DEBUG ( "long request: %u\n", i );
+//            }
+//
+//          afp_send ( ctx, l, sizeof ( l ), &sock );
+//          afp_send_feedback ( ctx, FINISHED_LONG );
+//        }
+//      else
+//        {
+//          DEBUG ( "Worker %u received short request\n", worker_id );
+//          // DEBUG ( "App received packet with size %u\n", len );
+//          // DEBUG ( "%s\n", ( char * ) data );
+//
+//          // rte_delay_ms ( 500 );
+//
+//          afp_send ( ctx, s, sizeof ( s ), &sock );
+//        }
+//    }
+//}
+
 void
-app ( afp_ctx_t *ctx )
+psp_server ( afp_ctx_t *ctx )
 {
   void *data;
   uint16_t len;
   struct sock sock;
-
-  char s[] = "Short response!\n";
-  char l[] = "LONG response!\n";
 
   size_t t;
   while ( 1 )
@@ -48,32 +90,7 @@ app ( afp_ctx_t *ctx )
       if ( !( t = afp_recv ( ctx, &data, &len, &sock ) ) )
         continue;
 
-      if ( !strcmp ( data, "LONG\n" ) )
-        {
-          int i = 50;
-          DEBUG ( "Worker %u received long request\n", worker_id );
-          afp_send_feedback ( ctx, START_LONG );
-          while ( i-- )
-            {
-              int j = 100000000UL;
-              while ( j-- )
-                ;
-              DEBUG ( "long request: %u\n", i );
-            }
-
-          afp_send ( ctx, l, sizeof ( l ), &sock );
-          afp_send_feedback ( ctx, FINISHED_LONG );
-        }
-      else
-        {
-          DEBUG ( "Worker %u received short request\n", worker_id );
-          // DEBUG ( "App received packet with size %u\n", len );
-          // DEBUG ( "%s\n", ( char * ) data );
-
-          // rte_delay_ms ( 500 );
-
-          afp_send ( ctx, s, sizeof ( s ), &sock );
-        }
+      afp_send ( ctx, data, len, &sock );
     }
 }
 
@@ -82,7 +99,7 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 {
   afp_ctx_t *ctx = ( afp_ctx_t * ) ( ( uintptr_t ) msb_afp << 32 | lsb_afp );
 
-  app ( ctx );
+  psp_server ( ctx );
 }
 
 // TODO: signal or dune interrupt
@@ -164,7 +181,7 @@ worker ( void *arg )
   // context management
   while ( 1 )
     {
-      DEBUG ( "Creating context on worker %u\n", worker_id );
+      // DEBUG ( "Creating context on worker %u\n", worker_id );
 
       worker_app_ctx = context_alloc ();
       if ( !worker_app_ctx )
