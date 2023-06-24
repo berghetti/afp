@@ -79,25 +79,26 @@ _trap_entry:
   movq %r11, R11(%rsp)
 
   /* call we interrupt handler */
-  call jmp_for_me
+  call interrupt_handler
+
+  /* load flags values from stack, save by pushf, to AH register.
+     away from instruction sahf to remove data depedency. */
+  mov FLAGS(%rsp), %ah
 
   /* restore callee-clobbered registers */
   movq RDI(%rsp), %rdi
   movq RSI(%rsp), %rsi
   movq RDX(%rsp), %rdx
   movq RCX(%rsp), %rcx
-  /* movq RAX(%rsp), %rax */
   movq R8(%rsp), %r8
   movq R9(%rsp), %r9
   movq R10(%rsp), %r10
   movq R11(%rsp), %r11
 
   /* restore flag register.
-     load flags values from stack, save by pushf, to AH register and
-     load AH to flags register, using sahf.
-     Could using popf, but popf is look slow
+     load AH to flags register. save only SF, ZF, AF, PF, and CF flags.
+     Could using popf, but popf is look more slow
      (https://www.agner.org/optimize/instruction_tables.pdf).*/
-  mov FLAGS(%rsp), %ah
   sahf
 
   /* finally restore rax */
