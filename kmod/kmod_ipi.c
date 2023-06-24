@@ -20,6 +20,9 @@
 
 #include "kmod_ipi.h"
 
+/* explicity ignored return value from copy_to/from_user */
+#pragma GCC diagnostic ignored "-Wunused-result"
+
 static void
 trampoline ( void __user *arg )
 {
@@ -30,8 +33,8 @@ trampoline ( void __user *arg )
    */
   regs = task_pt_regs ( current );
 
-  /* reserve space on user stack to save EIP */
-  regs->sp -= 8;
+  /* reserve space, 8 or 4 bytes, on user stack to save EIP */
+  regs->sp -= sizeof ( regs->sp );
 
   /* save EIP in user stack (RSP) */
   copy_to_user ( ( unsigned long * ) regs->sp, &regs->ip, sizeof ( regs->ip ) );
