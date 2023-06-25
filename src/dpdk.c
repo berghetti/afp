@@ -24,7 +24,7 @@ static const struct rte_eth_conf conf = {
 
 #define QUEUE_SIZE 4096U
 
-#define MPOOL_SIZE 512 * 1024 - 1
+#define MPOOL_NR_ELEMENTS 32 * 1024 - 1
 #define MPOOL_CACHE_SIZE 512U
 
 static void
@@ -69,6 +69,8 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
     }
 
   struct rte_eth_txconf *txconf = &dev_info.default_txconf;
+  txconf->tx_rs_thresh = 64;
+  txconf->tx_free_thresh = 64;
   txconf->offloads =
           RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
 
@@ -100,7 +102,7 @@ dpdk_init ( uint16_t port_id, uint16_t num_queues )
   struct rte_mempool *mbuf_pool;
 
   mbuf_pool = rte_pktmbuf_pool_create ( "mbuf_pool",
-                                        MPOOL_SIZE,
+                                        MPOOL_NR_ELEMENTS,
                                         MPOOL_CACHE_SIZE,
                                         0,
                                         RTE_MBUF_DEFAULT_BUF_SIZE,
