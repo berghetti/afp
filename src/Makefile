@@ -6,6 +6,7 @@ BUILD_DIR = build
 C_SRCS = $(wildcard ./*.c)
 H_SRCS = $(wildcard ./*.h)
 OBJS = $(C_SRCS:.c=.o)
+OBJS += trap.o
 
 PKGCONF ?= pkg-config
 
@@ -26,6 +27,9 @@ $(BUILD_DIR)/$(APP): $(OBJS) $(H_SRCS) Makefile | $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.c $(H_SRCS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+trap.o: ../kmod/trap.S
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
 	@mkdir -p $@

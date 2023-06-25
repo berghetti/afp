@@ -159,8 +159,8 @@ statistics ( int __notused sig )
   exit ( 0 );
 }
 
-// TODO: signal or dune interrupt
-static void
+// TODO: signal or dune interrupt or ipi module
+void
 interrupt_handler ( int __notused sig )
 {
   interruptions++;
@@ -241,7 +241,8 @@ worker ( void *arg )
                        .rxqs = rxqs,
                        .wait_queue = wait_queue };
 
-  interrupt_register_work_tid ( worker_id, gettid () );
+  // interrupt_register_work_tid ( worker_id, gettid () );
+  interrupt_register_worker ( worker_id, rte_lcore_id () );
 
   queue_init ( ctx.rxq );
 

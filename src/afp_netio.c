@@ -104,15 +104,11 @@ work_stealing ( struct queue *my, struct queue *remote )
 bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
 {
-
-  if ( !queue_is_empty ( rxq ) )
-    return true;
-
   unsigned free = queue_count_free ( rxq );
 
   // DEBUG ( "FREE %u\n", free );
 
-  // try keep rxq full to improve work stealing
+  // try keep app queue (rxq) full to improve work stealing
   if ( free >= BURST_SIZE )
     {
       struct rte_mbuf *pkts[BURST_SIZE];
