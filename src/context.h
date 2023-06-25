@@ -6,7 +6,7 @@
 #include <sys/ucontext.h>
 #include <ucontext.h>
 
-#define STACK_SIZE 16 * 1024
+#define STACK_SIZE 32 * 1024
 
 // TODO: create a mempool to this allocations
 

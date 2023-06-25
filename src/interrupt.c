@@ -5,6 +5,8 @@
 #include <signal.h>
 #include <sys/syscall.h>
 
+#include <rte_malloc.h>
+
 #include "afp_internal.h"
 #include "debug.h"
 
@@ -46,17 +48,15 @@ interrupt_init ( void ( *handler ) ( int ) )
 {
   pid = getpid ();
 
-  // stack_t ss = { .ss_sp = rte_malloc ( NULL, 2 * 1024, 0 ),
-  //               .ss_size = 2 * 1024 };
+  // stack_t ss = { .ss_sp = rte_malloc ( NULL, 4 * 1024, 0 ),
+  //               .ss_size = 4 * 1024 };
 
   // sigaltstack ( &ss, NULL );
 
-  struct sigaction sa;
-  sa.sa_handler = handler;
-  sa.sa_flags = SA_NODEFER | SA_RESTART | SA_ONSTACK;
+  struct sigaction sa = { .sa_handler = handler, .sa_flags = SA_NODEFER };
 
-  if ( sigemptyset ( &sa.sa_mask ) )
-    FATAL ( "%s\n", "Error setup interrupt" );
+  sigemptyset ( &sa.sa_mask );
+  sigaddset ( &sa.sa_mask, SIGUSR1 );
 
   if ( sigaction ( SIGUSR1, &sa, NULL ) )
     FATAL ( "%s\n", "Error setup interrupt" );

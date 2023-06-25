@@ -17,11 +17,13 @@ afp_send_feedback ( afp_ctx_t *ctx, enum feedback feedback )
     {
       case START_LONG:
         DEBUG ( "%lu: Starting timer on worker %u\n", now, worker_id );
+        ctx->in_long_request = true;
         timer_set ( worker_id, now );
         break;
 
       case FINISHED_LONG:
         DEBUG ( "Worker %u finished long request\n", worker_id );
+        ctx->in_long_request = false;
         timer_disable ( worker_id );
     }
 }

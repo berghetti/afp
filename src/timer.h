@@ -14,6 +14,9 @@ void
 timer_init ( uint16_t tot_workers );
 
 void
+worker_set_handler_status ( uint16_t worker, bool status );
+
+void
 timer_main ( uint16_t tot_workers );
 
 #endif

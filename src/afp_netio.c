@@ -100,18 +100,26 @@ work_stealing ( struct queue *my, struct queue *remote )
   return size;
 }
 
+// return true if has work on queue
 bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
 {
-  unsigned count = queue_count ( rxq );
 
-  // try keep rxq full
-  if ( count < QUEUE_SIZE - BURST_SIZE )
+  if ( !queue_is_empty ( rxq ) )
+    return true;
+
+  unsigned free = queue_count_free ( rxq );
+
+  // DEBUG ( "FREE %u\n", free );
+
+  // try keep rxq full to improve work stealing
+  if ( free >= BURST_SIZE )
     {
       struct rte_mbuf *pkts[BURST_SIZE];
       uint16_t nb_rx;
 
       nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
+      // DEBUG ( "nb_rx %u\n", nb_rx );
       if ( nb_rx )
         {
           // DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
@@ -122,19 +130,22 @@ has_work_in_queues ( struct queue *rxq, uint16_t hwq )
         }
     }
 
-  return ( count != 0 );
+  return ( free != QUEUE_SIZE - 1 );
 }
 
 size_t
 afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 {
+  // DEBUG ( "Worker: %u\n", ctx->worker_id );
   struct rte_mbuf *pkt;
   queue_lock ( ctx->rxq );
-  // DEBUG ( "Worker: %u\n", ctx->worker_id );
+
   while ( 1 )
     {
       if ( has_work_in_queues ( ctx->rxq, ctx->hwq ) )
         goto done;
+
+      // DEBUG ( "Worker: %u\n", ctx->worker_id );
 
       void *long_ctx;
       if ( !rte_ring_mc_dequeue ( ctx->wait_queue, &long_ctx ) )
@@ -164,6 +175,7 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
 
 done:
   pkt = queue_dequeue ( ctx->rxq );
+  // DEBUG ( "Worker: %u\n", ctx->worker_id );
   queue_unlock ( ctx->rxq );
   // DEBUG ( "Rxq size on worker %u: %u\n",
   //        ctx->worker_id,
@@ -211,16 +223,11 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
   ip_hdr->time_to_live = 64;
   ip_hdr->next_proto_id = IPPROTO_UDP;
   ip_hdr->hdr_checksum = 0;
-  // ip_hdr->src_addr = rte_cpu_to_be_32 ( MAKE_IP_ADDR ( 10, 0, 0, 1 ) );
-  // ip_hdr->dst_addr = rte_cpu_to_be_32 ( MAKE_IP_ADDR ( 10, 0, 0, 2 ) );
-
   SWAP ( ip_hdr->src_addr, ip_hdr->dst_addr );
 
   offset += sizeof ( struct rte_ipv4_hdr );
   struct rte_udp_hdr *udp_hdr;
   udp_hdr = rte_pktmbuf_mtod_offset ( pkt, struct rte_udp_hdr *, offset );
-  // udp_hdr->src_port = rte_cpu_to_be_16 ( 80 );
-  // udp_hdr->dst_port = rte_cpu_to_be_16 ( 1024 );
   SWAP ( udp_hdr->src_port, udp_hdr->dst_port );
 
   udp_hdr->dgram_len = rte_cpu_to_be_16 ( sizeof ( struct rte_udp_hdr ) + len );
@@ -233,7 +240,7 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
   // TODO: need this?
   pkt->l2_len = RTE_ETHER_HDR_LEN;
   pkt->l3_len = sizeof ( struct rte_ipv4_hdr );
-  pkt->l4_len = sizeof ( struct rte_udp_hdr );
+  pkt->l4_len = sizeof ( struct rte_udp_hdr ) + len;
 
   // Total size packet
   pkt->pkt_len = pkt->data_len = MIN_PKT_SIZE + len;
