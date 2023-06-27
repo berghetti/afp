@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <rte_errno.h>
 #include <rte_ethdev.h>
@@ -23,8 +24,8 @@
 
 // statistics
 // TODO: remove from here
-#include "signal.h"
-static uint64_t swaps, interruptions, int_no_swaps, enqueues_long;
+static uint64_t swaps, interruptions, int_no_swaps, invalid_interruptions,
+        yields;
 
 static struct config conf = { .port_id = 0 };
 
@@ -41,55 +42,7 @@ static __thread ucontext_t main_ctx;
 static __thread ucontext_t *worker_app_ctx;
 static __thread ucontext_t *tmp_long_ctx = NULL;
 
-static __thread bool current_ctx_is_main = true;
-
 static __thread afp_ctx_t ctx;
-
-// simule application code...
-// void
-// app ( afp_ctx_t *ctx )
-//{
-//  void *data;
-//  uint16_t len;
-//  struct sock sock;
-//
-//  char s[] = "Short response!\n";
-//  char l[] = "LONG response!\n";
-//
-//  size_t t;
-//  while ( 1 )
-//    {
-//      if ( !( t = afp_recv ( ctx, &data, &len, &sock ) ) )
-//        continue;
-//
-//      if ( !strcmp ( data, "LONG\n" ) )
-//        {
-//          int i = 50;
-//          DEBUG ( "Worker %u received long request\n", worker_id );
-//          afp_send_feedback ( ctx, START_LONG );
-//          while ( i-- )
-//            {
-//              int j = 100000000UL;
-//              while ( j-- )
-//                ;
-//              DEBUG ( "long request: %u\n", i );
-//            }
-//
-//          afp_send ( ctx, l, sizeof ( l ), &sock );
-//          afp_send_feedback ( ctx, FINISHED_LONG );
-//        }
-//      else
-//        {
-//          DEBUG ( "Worker %u received short request\n", worker_id );
-//          // DEBUG ( "App received packet with size %u\n", len );
-//          // DEBUG ( "%s\n", ( char * ) data );
-//
-//          // rte_delay_ms ( 500 );
-//
-//          afp_send ( ctx, s, sizeof ( s ), &sock );
-//        }
-//    }
-//}
 
 void
 psp_server ( afp_ctx_t *ctx )
@@ -121,6 +74,7 @@ psp_server ( afp_ctx_t *ctx )
       nloop = *( uint32_t * ) p * 2.2f;
 
       // INFO ( "ID: %u TYPE: %u NLOOP: %u\n", id, type, nloop );
+
       if ( type == LONG )
         afp_send_feedback ( ctx, START_LONG );
 
@@ -146,15 +100,17 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 static void
 statistics ( int __notused sig )
 {
-  INFO ( "\nstatistics\n"
-         "SWAPs:    %lu\n"
-         "INTs:     %lu\n"
-         "NO_SWAPS: %lu\n"
-         "LONG Q:   %lu\n",
-         swaps,
+  INFO ( "Statistics:\n"
+         "  Interruptions:     %lu\n"
+         "  Context swapts:    %lu\n"
+         "  Long continue:     %lu\n"
+         "  Invalid interruptions: %lu\n"
+         "  yields:                %lu\n",
          interruptions,
+         swaps,
          int_no_swaps,
-         enqueues_long );
+         invalid_interruptions,
+         yields );
 
   exit ( 0 );
 }
@@ -165,12 +121,11 @@ interrupt_handler ( int __notused sig )
 {
   interruptions++;
 
-  DEBUG ( "Worker %u received interrupt\n", worker_id );
+  // DEBUG ( "Worker %u received interrupt\n", worker_id );
 
-  if ( !ctx.in_long_request || current_ctx_is_main )
+  if ( !ctx.in_long_request )
     {
-      // DEBUG ( "%s\n", "Worker not in long request, return from interrupt" );
-      // worker_set_handler_status ( ctx.worker_id, false );
+      invalid_interruptions++;
       return;
     }
 
@@ -179,21 +134,21 @@ interrupt_handler ( int __notused sig )
   if ( !has_work_in_queues ( &rxqs[worker_id], hwq ) )
     {
       int_no_swaps++;
-      DEBUG ( "Worker %u restart timer\n", worker_id );
-      afp_send_feedback ( &ctx, START_LONG );
+      // DEBUG ( "Worker %u restart timer\n", worker_id );
+      timer_set ( worker_id );
+      // afp_send_feedback ( &ctx, START_LONG );
       return;
     }
 
   // enqueue long request
-  DEBUG ( "enqueue ctx %p\n", worker_app_ctx );
+  // DEBUG ( "enqueue ctx %p\n", worker_app_ctx );
   if ( rte_ring_mp_enqueue ( wait_queue, worker_app_ctx ) )
     FATAL ( "%s\n",
             "Error enqueue long request. This is an memory leak and the "
-            "request is lost." );
+            "request is lost.\n"
+            "Try increase len wait_queue.\n" );
 
-  enqueues_long++;
-
-  DEBUG ( "Worker %u return from interrupt\n", worker_id );
+  // DEBUG ( "Worker %u return from interrupt\n", worker_id );
 
   // save worker_app_ctx and jump to main_ctx, that will create new app
   // context. next time worker_app_ctx run this starting after swapcontext
@@ -206,6 +161,8 @@ void
 exit_to_context ( ucontext_t *long_ctx )
 {
   DEBUG ( "Worker %u swap to long request %p\n", worker_id, long_ctx );
+
+  yields++;
 
   tmp_long_ctx = long_ctx;
   setcontext ( &main_ctx );
@@ -233,8 +190,7 @@ worker ( void *arg )
          hwq );
 
   // afp_ctx_t ctx = { .worker_id = worker_id,
-  ctx = ( afp_ctx_t ){ .in_long_request = false,
-                       .worker_id = worker_id,
+  ctx = ( afp_ctx_t ){ .worker_id = worker_id,
                        .tot_workers = tot_workers,
                        .hwq = hwq,
                        .rxq = &rxqs[worker_id],
@@ -259,7 +215,7 @@ worker ( void *arg )
       if ( !worker_app_ctx )
         FATAL ( "%s\n", "Error allocate context worker" );
 
-      // context_setlink ( worker_app_ctx, &main_ctx );
+      context_setlink ( worker_app_ctx, &main_ctx );
       worker_app_ctx->uc_link = &main_ctx;
       getcontext ( worker_app_ctx );
       makecontext ( worker_app_ctx,
@@ -269,10 +225,7 @@ worker ( void *arg )
                     lsb );
 
       // go to app context
-      current_ctx_is_main = false;
       swapcontext ( &main_ctx, worker_app_ctx );
-
-      current_ctx_is_main = true;
 
       // swapt between context without work to long request context
       if ( tmp_long_ctx )
@@ -287,8 +240,8 @@ worker ( void *arg )
           // known long request, rearming alarm.
           // asm volatile( "mfence" ::: "memory" );
 
-          afp_send_feedback ( &ctx, START_LONG );
-          current_ctx_is_main = false;
+          // afp_send_feedback ( &ctx, START_LONG );
+          timer_set ( worker_id );
 
           swaps++;
 
@@ -355,7 +308,6 @@ main ( int argc, char **argv )
   afp_netio_init ( &conf );
 
   interrupt_init ( interrupt_handler );
-  timer_init ( tot_workers );
   workers_init ();
 
   signal ( SIGINT, statistics );

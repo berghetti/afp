@@ -6,7 +6,7 @@
 #include <sys/ucontext.h>
 #include <ucontext.h>
 
-#define STACK_SIZE 32 * 1024
+#define STACK_SIZE 16 * 1024
 
 // TODO: create a mempool to this allocations
 
@@ -48,19 +48,19 @@ context_setlink ( ucontext_t *c, ucontext_t *uc_link )
   uintptr_t *sp;
 
   /* Set up the sp pointer so that we save uc_link in the correct address. */
-  sp = ( ( uintptr_t * ) c->uc_stack.ss_sp + c->uc_stack.ss_size );
-  sp -= 1;
+  // sp = ( ( uintptr_t * ) c->uc_stack.ss_sp + c->uc_stack.ss_size );
+  // sp -= 1;
 
-  /* We assume that we have less than 6 arguments here.
-   * Align stack to multuple of 16, clearning last four bits and reserve  8
-   * bytes space to return address */
-  sp = ( uintptr_t * ) ( ( ( ( uintptr_t ) sp ) & -16L ) - 8 );
+  ///* We assume that we have less than 6 arguments here.
+  // * Align stack to multuple of 16, clearning last four bits and reserve  8
+  // * bytes space to return address */
+  //// sp = ( uintptr_t * ) ( ( ( ( uintptr_t ) sp ) & -16L ) - 8 );
 
   c->uc_link = uc_link;
 
-  /* push return address on stack.
-     sp[1] because stack grow to "below" */
-  sp[1] = ( uintptr_t ) uc_link;
+  ///* push return address on stack.
+  //   sp[1] because stack grow to "below" */
+  // sp[1] = ( uintptr_t ) uc_link;
 }
 
 #endif
