@@ -104,10 +104,6 @@ work_stealing ( struct queue *my, struct queue *remote )
 bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
 {
-
-  if ( !queue_is_empty ( rxq ) )
-    return true;
-
   unsigned free = queue_count_free ( rxq );
 
   // DEBUG ( "FREE %u\n", free );
