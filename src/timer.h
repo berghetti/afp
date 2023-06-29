@@ -8,6 +8,9 @@
 void
 timer_set ( uint16_t worker_id );
 
+void
+timer_set_delay ( uint16_t worker_id, uint32_t delay );
+
 /* only return if timer is disabled */
 void
 timer_disable ( uint16_t worker_id );

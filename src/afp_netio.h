@@ -20,13 +20,16 @@ struct sock
 void
 afp_netio_init ( struct config * );
 
+void
+afp_netio_init_per_worker ( void );
+
 bool
-has_work_in_queues ( struct queue *rxq, uint16_t hwq );
+afp_netio_has_work ( void );
 
 size_t
-afp_recv ( afp_ctx_t *, void **, uint16_t *, struct sock * );
+afp_recv ( void **, uint16_t *, struct sock * );
 
 ssize_t
-afp_send ( afp_ctx_t *, void *, uint16_t, struct sock * );
+afp_send ( void *, uint16_t, struct sock * );
 
 #endif  // AFP_NETIO_H

@@ -3,19 +3,24 @@
 #include <rte_ether.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
+#include <stdint.h>
 
+#include "globals.h"
 #include "dpdk.h"
 #include "queue.h"
 #include "afp_netio.h"
 #include "debug.h"
 #include "interrupt.h"
-#include "timer.h"
 #include "compiler.h"
 #include "afp_internal.h"
+#include "timer.h"
 
 static uint16_t port_id;
 // static struct rte_mempool *pkt_pool;
 static struct rte_ether_addr my_ether;
+
+// app queues
+static struct queue rxqs[MAX_WORKERS];
 
 // TODO: add this to a header file
 extern void __noreturn
@@ -101,24 +106,20 @@ work_stealing ( struct queue *my, struct queue *remote )
 }
 
 // return true if has work on queue
-bool
+static bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
 {
   unsigned free = queue_count_free ( rxq );
-
-  // DEBUG ( "FREE %u\n", free );
+  struct rte_mbuf *pkts[BURST_SIZE];
+  uint16_t nb_rx;
 
   // try keep app queue (rxq) full to improve work stealing
   if ( free >= BURST_SIZE )
     {
-      struct rte_mbuf *pkts[BURST_SIZE];
-      uint16_t nb_rx;
-
       nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
-      // DEBUG ( "nb_rx %u\n", nb_rx );
       if ( nb_rx )
         {
-          // DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
+          DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
           if ( !queue_enqueue_bulk ( rxq, ( void ** ) pkts, nb_rx ) )
             FATAL ( "%s\n", "Error enqueue bulk" );
 
@@ -129,40 +130,47 @@ has_work_in_queues ( struct queue *rxq, uint16_t hwq )
   return ( free != QUEUE_SIZE - 1 );
 }
 
+bool
+afp_netio_has_work ( void )
+{
+  struct queue *rxq = &rxqs[worker_id];
+  return has_work_in_queues ( rxq, hwq );
+}
+
 size_t
-afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
+afp_recv ( void **data, uint16_t *len, struct sock *s )
 {
   // DEBUG ( "Worker: %u\n", ctx->worker_id );
   struct rte_mbuf *pkt;
-  queue_lock ( ctx->rxq );
+  struct queue *rxq = &rxqs[worker_id];
+
+  queue_lock ( rxq );
 
   while ( 1 )
     {
-      if ( has_work_in_queues ( ctx->rxq, ctx->hwq ) )
+      if ( has_work_in_queues ( rxq, hwq ) )
         goto done;
 
-      // DEBUG ( "Worker: %u\n", ctx->worker_id );
-
       void *long_ctx;
-      if ( !rte_ring_mc_dequeue ( ctx->wait_queue, &long_ctx ) )
+      if ( !rte_ring_mc_dequeue ( wait_queue, &long_ctx ) )
         {
-          queue_unlock ( ctx->rxq );
+          queue_unlock ( rxq );
           exit_to_context ( long_ctx );
         }
 
       static __thread uint16_t remote_worker = 0;
-      for ( uint16_t i = 0; i < ctx->tot_workers; i++ )
+      for ( uint16_t i = 0; i < tot_workers; i++ )
         {
-          remote_worker = ( remote_worker + 1 ) % ctx->tot_workers;
+          remote_worker = ( remote_worker + 1 ) % tot_workers;
 
-          if ( ctx->worker_id == remote_worker )
+          if ( worker_id == remote_worker )
             continue;
 
-          if ( work_stealing ( ctx->rxq, &ctx->rxqs[remote_worker] ) )
+          if ( work_stealing ( rxq, &rxqs[remote_worker] ) )
             {
               DEBUG ( "Worker %u stealead %u packtes from worker %u\n",
-                      ctx->worker_id,
-                      queue_count ( ctx->rxq ),
+                      worker_id,
+                      queue_count ( rxq ),
                       remote_worker );
               goto done;
             }
@@ -170,12 +178,8 @@ afp_recv ( afp_ctx_t *ctx, void **data, uint16_t *len, struct sock *s )
     }
 
 done:
-  pkt = queue_dequeue ( ctx->rxq );
-  // DEBUG ( "Worker: %u\n", ctx->worker_id );
-  queue_unlock ( ctx->rxq );
-  // DEBUG ( "Rxq size on worker %u: %u\n",
-  //        ctx->worker_id,
-  //        queue_count ( ctx->rxq ) );
+  pkt = queue_dequeue ( rxq );
+  queue_unlock ( rxq );
 
   if ( parse_pkt ( pkt, data, len ) )
     {
@@ -189,9 +193,8 @@ done:
 }
 
 ssize_t
-afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
+afp_send ( void *buff, uint16_t len, struct sock *s )
 {
-  // DEBUG ( "%s\n", "send pkt" );
   struct rte_mbuf *pkt = s->pkt;
 
   // offloading cksum to hardware
@@ -241,7 +244,7 @@ afp_send ( afp_ctx_t *ctx, void *buff, uint16_t len, struct sock *s )
   // Total size packet
   pkt->pkt_len = pkt->data_len = MIN_PKT_SIZE + len;
 
-  return rte_eth_tx_burst ( port_id, ctx->hwq, &pkt, 1 );
+  return rte_eth_tx_burst ( port_id, hwq, &pkt, 1 );
 }
 
 void
@@ -250,4 +253,10 @@ afp_netio_init ( struct config *conf )
   dpdk_init ( conf->port_id, conf->num_queues );
   port_id = conf->port_id;
   my_ether = conf->my_ether_addr;
+}
+
+void
+afp_netio_init_per_worker ( void )
+{
+  queue_init ( &rxqs[worker_id] );
 }

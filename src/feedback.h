@@ -10,6 +10,6 @@ enum feedback
 };
 
 void
-afp_send_feedback ( afp_ctx_t *ctx, enum feedback f );
+afp_send_feedback ( enum feedback f );
 
 #endif

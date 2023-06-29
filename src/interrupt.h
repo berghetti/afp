@@ -14,12 +14,6 @@ void
 interrupt_register_worker ( uint16_t worker_id, int core );
 
 void
-interrupt_enable ( void );
-
-void
-interrupt_disable ( void );
-
-void
 interrupt_init ( void ( *handler ) ( int ) );
 
 #endif

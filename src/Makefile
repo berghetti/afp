@@ -18,7 +18,7 @@ endif
 CFLAGS += -O3 -ggdb -Wall -Wextra
 CFLAGS += -DNDEBUG
 CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
-LDLIBS = $(shell $(PKGCONF) --libs libdpdk)
+LDLIBS = $(shell $(PKGCONF) --libs --static libdpdk)
 
 all: $(BUILD_DIR)/$(APP)
 
