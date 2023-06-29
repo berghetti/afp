@@ -1,6 +1,5 @@
 
 .file "trap.S"
-.text
 
 /*
  * See the "System V Application Binary Interface" for a full explation of
@@ -53,6 +52,7 @@ RSP		 stack pointer
  * user handler interruption.
  */
 
+.text
 .align 16
 .globl _trap_entry
 .type _trap_entry, @function

@@ -7,6 +7,9 @@ C_SRCS = $(wildcard ./*.c)
 H_SRCS = $(wildcard ./*.h)
 OBJS = $(C_SRCS:.c=.o)
 
+# objs to assembly sources
+OBJS += trap.o swap.o
+
 PKGCONF ?= pkg-config
 
 ifneq ($(shell $(PKGCONF) --exists libdpdk && echo 0),0)
@@ -17,7 +20,7 @@ endif
 CFLAGS += -O3 -ggdb -Wall -Wextra
 CFLAGS += -DNDEBUG
 CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
-LDLIBS = $(shell $(PKGCONF) --libs libdpdk)
+LDLIBS = $(shell $(PKGCONF) --libs --static libdpdk)
 
 all: $(BUILD_DIR)/$(APP)
 
@@ -26,6 +29,12 @@ $(BUILD_DIR)/$(APP): $(OBJS) $(H_SRCS) Makefile | $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.c $(H_SRCS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+trap.o: ../kmod/trap.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.S
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
 	@mkdir -p $@

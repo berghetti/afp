@@ -4,18 +4,22 @@
 
 #include <stdint.h>
 
+/* may not activate the timer, see timer.c */
 void
-timer_set ( uint16_t worker_id, uint64_t now );
+timer_tryset ( uint16_t worker_id );
+
+/* functions that ensure timer is enabled/disables */
+
+void
+timer_set ( uint16_t worker_id );
+
+void
+timer_set_delay ( uint16_t worker_id, uint32_t delay );
 
 void
 timer_disable ( uint16_t worker_id );
 
-void
-timer_init ( uint16_t tot_workers );
-
-void
-worker_set_handler_status ( uint16_t worker, bool status );
-
+/* main function to 'timer core'*/
 void
 timer_main ( uint16_t tot_workers );
 
