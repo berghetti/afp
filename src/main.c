@@ -23,6 +23,7 @@
 #include "afp_internal.h"
 #include "feedback.h"
 #include "stats.h"
+#include "swap.h"
 
 static struct config conf = { .port_id = 0 };
 
@@ -99,7 +100,7 @@ interrupt_handler ( int __notused sig )
 
   /* invalid interrupt are when long request is finished but we yet receve a
    * interrupt. This could be a interrupt on bus */
-  if ( !in_long_request )
+  if ( rte_atomic16_read ( &in_long_request ) == 0 )
     {
       invalid_interruptions++;
       return;
@@ -110,7 +111,7 @@ interrupt_handler ( int __notused sig )
   if ( !afp_netio_has_work () )
     {
       int_no_swaps++;
-      timer_set ( worker_id );
+      timer_tryset ( worker_id );
       return;
     }
 
@@ -134,7 +135,7 @@ exit_to_context ( ucontext_t *long_ctx )
   yields++;
 
   tmp_long_ctx = long_ctx;
-  setcontext ( &main_ctx );
+  afp_setcontext ( &main_ctx );
 }
 
 static int
@@ -193,6 +194,7 @@ worker ( void *arg )
       // swapt between context without work to long request context
       if ( tmp_long_ctx )
         {
+          swaps++;
           context_free ( worker_app_ctx );
           worker_app_ctx = tmp_long_ctx;
           tmp_long_ctx = NULL;
@@ -200,14 +202,13 @@ worker ( void *arg )
           // update return address
           // context_setlink ( worker_app_ctx, &main_ctx );
 
+          DEBUG ( "Going to long ctx: %p\n", worker_app_ctx );
+
           /* known long request, rearming alarm with delay to compensate
            * the delay until get app code */
-          timer_set_delay ( worker_id, 10UL );
+          timer_set_delay ( worker_id, 20 );
 
-          swaps++;
-
-          DEBUG ( "Going to long ctx: %p\n", worker_app_ctx );
-          setcontext ( worker_app_ctx );
+          afp_setcontext ( worker_app_ctx );
         }
     }
 

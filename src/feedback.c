@@ -13,14 +13,14 @@ afp_send_feedback ( enum feedback f )
     {
       case START_LONG:
         // asm volatile( "sti" );
-        in_long_request = true;
+        rte_atomic16_set ( &in_long_request, 1 );
         timer_set ( worker_id );
         DEBUG ( "Worker %u started long request\n", worker_id );
         break;
 
       case FINISHED_LONG:
         // asm volatile( "cli" );
-        in_long_request = false;
+        rte_atomic16_set ( &in_long_request, 0 );
         timer_disable ( worker_id );
         DEBUG ( "Worker %u finished long request\n", worker_id );
     }

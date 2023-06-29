@@ -6,7 +6,9 @@ BUILD_DIR = build
 C_SRCS = $(wildcard ./*.c)
 H_SRCS = $(wildcard ./*.h)
 OBJS = $(C_SRCS:.c=.o)
-OBJS += trap.o
+
+# objs to assembly sources
+OBJS += trap.o swap.o
 
 PKGCONF ?= pkg-config
 
@@ -29,6 +31,9 @@ $(BUILD_DIR)/%.o: %.c $(H_SRCS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 trap.o: ../kmod/trap.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR):

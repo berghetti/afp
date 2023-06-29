@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <generic/rte_atomic.h>
+
 #include "afp_internal.h"
 
 extern uint16_t tot_workers;
@@ -16,7 +18,7 @@ extern __thread uint16_t worker_id;
 /* hardware queue */
 extern __thread uint16_t hwq;
 
-extern __thread bool in_long_request;
+extern __thread rte_atomic16_t in_long_request;
 
 extern uint64_t swaps, interruptions, int_no_swaps, invalid_interruptions,
         yields;

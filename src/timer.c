@@ -1,4 +1,5 @@
 
+#include <generic/rte_cycles.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -17,36 +18,43 @@ static uint64_t workers_alarm[MAX_WORKERS];
 
 static rte_spinlock_t workers_lock[MAX_WORKERS];
 
-static uint64_t tsc_freq_us;
+static uint32_t tsc_freq_us;
 
 static uint64_t tsc_quantum;
-
-static inline void
-cpu_relax ( void )
-{
-  asm volatile( "pause" );
-}
 
 /* if not taken lock, this was called from interrupt handler
  * and main line is in timer_disable, or 'timer_main' core is sending
  * a interrupt to we. */
 void
-timer_set ( uint16_t worker_id )
+timer_tryset ( uint16_t worker_id )
 {
   if ( !rte_spinlock_trylock ( &workers_lock[worker_id] ) )
     return;
 
-  workers_alarm[worker_id] = rte_get_tsc_cycles ();
+  workers_alarm[worker_id] = rte_get_tsc_cycles () + tsc_quantum;
   rte_spinlock_unlock ( &workers_lock[worker_id] );
 }
 
+/* ensure timer is enabled. */
+void
+timer_set ( uint16_t worker_id )
+{
+  rte_spinlock_lock ( &workers_lock[worker_id] );
+
+  workers_alarm[worker_id] = rte_get_tsc_cycles () + tsc_quantum;
+
+  rte_spinlock_unlock ( &workers_lock[worker_id] );
+}
+
+/* ensure timer is enabled.
+ * permite user set specific delay. */
 void
 timer_set_delay ( uint16_t worker_id, uint32_t us_delay )
 {
-  if ( !rte_spinlock_trylock ( &workers_lock[worker_id] ) )
-    return;
+  rte_spinlock_lock ( &workers_lock[worker_id] );
 
   workers_alarm[worker_id] = rte_get_tsc_cycles () + us_delay * tsc_freq_us;
+
   rte_spinlock_unlock ( &workers_lock[worker_id] );
 }
 
@@ -72,6 +80,12 @@ timer_init ( uint16_t tot_workers )
     }
 }
 
+static inline void
+cpu_relax ( void )
+{
+  asm volatile( "pause" );
+}
+
 void
 timer_main ( uint16_t tot_workers )
 {
@@ -79,46 +93,53 @@ timer_main ( uint16_t tot_workers )
 
   timer_init ( tot_workers );
 
-  tsc_freq_us = rte_get_tsc_hz () / 1000000UL;
+  tsc_freq_us = rte_get_tsc_hz () / 1000000U;
   tsc_quantum = QUANTUM * tsc_freq_us;
 
-  INFO ( "TSC frequency: %lu ticks per us\n", tsc_freq_us );
+  INFO ( "TSC frequency: %u ticks per us\n", tsc_freq_us );
 
-  uint64_t min;
-  uint16_t worker, i;
+  uint64_t deadline, min_deadline, now;
+
+  now = rte_get_tsc_cycles ();
   while ( 1 )
     {
-      // find first worker started alarm
-      min = UINT64_MAX;
-      for ( i = 0; i < tot_workers; i++ )
+      min_deadline = UINT64_MAX;
+
+      for ( uint16_t i = 0; i < tot_workers; i++ )
         {
-          uint64_t value = workers_alarm[i];
-          if ( value < min )
+          /* worker may be disabling timer */
+          if ( !rte_spinlock_trylock ( &workers_lock[i] ) )
+            continue;
+
+          deadline = workers_alarm[i];
+
+          /* timer disabled */
+          if ( deadline == UINT64_MAX )
+            goto next;
+
+          /* It is not time yet */
+          if ( deadline < now )
             {
-              min = value;
-              worker = i;
+              if ( deadline < min_deadline )
+                min_deadline = deadline;
+
+              goto next;
             }
+
+          /* one shot */
+          workers_alarm[i] = UINT64_MAX;
+          interrupt_send ( i );
+
+        next:
+          rte_spinlock_unlock ( &workers_lock[i] );
         }
 
-      if ( UINT64_MAX == min )
+      /* all timers disabled */
+      if ( min_deadline == UINT64_MAX )
         continue;
 
-      min += tsc_quantum;
-
-      while ( rte_get_tsc_cycles () < min )
+      /* wait next shot */
+      while ( ( now = rte_get_tsc_cycles () ) < min_deadline )
         cpu_relax ();
-
-      // worker not disarm alarm
-      if ( !rte_spinlock_trylock ( &workers_lock[worker] ) )
-        continue;
-
-      if ( workers_alarm[worker] != UINT64_MAX )
-        {
-          DEBUG ( "Send interrupt to worker %u\n", worker );
-          workers_alarm[worker] = UINT64_MAX;
-          interrupt_send ( worker );
-        }
-
-      rte_spinlock_unlock ( &workers_lock[worker] );
     }
 }
