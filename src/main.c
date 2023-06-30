@@ -1,4 +1,5 @@
 
+#include <stdbool.h>
 #define _GNU_SOURCE  // gettid
 
 #include <sys/ucontext.h>
@@ -28,6 +29,8 @@
 static struct config conf = { .port_id = 0 };
 
 static __thread ucontext_t main_ctx, *worker_app_ctx, *tmp_long_ctx;
+
+static __thread volatile bool app_return;
 
 void
 psp_server ( void )
@@ -82,12 +85,9 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 
   psp_server ();
 
-  // TODO: check this
-  /* if app code return, jump to main context.
-   * this avoid update return adress on stack of app context when this change of
-   * core */
-  // context_free ( worker_app_ctx );
-  setcontext ( &main_ctx );
+  app_return = true;
+  afp_setcontext ( &main_ctx );
+  __builtin_unreachable ();
 }
 
 // signal, dune or ipi module interrupt
@@ -130,12 +130,69 @@ interrupt_handler ( int __notused sig )
 void
 exit_to_context ( ucontext_t *long_ctx )
 {
-  DEBUG ( "Worker %u swap to long request %p\n", worker_id, long_ctx );
-
   yields++;
 
   tmp_long_ctx = long_ctx;
   afp_setcontext ( &main_ctx );
+  __builtin_unreachable ();
+}
+
+static void
+main_mgnt_ctx ( void )
+{
+  // TODO: make this user param
+  void *ctxp = NULL;
+  uint32_t msb = ( ( uintptr_t ) ctxp >> 32 );
+  uint32_t lsb = ( uint32_t ) ( uintptr_t ) ctxp;
+
+  /* main context management */
+  while ( 1 )
+    {
+      DEBUG ( "Creating context on worker %u\n", worker_id );
+
+      worker_app_ctx = context_alloc ();
+      if ( !worker_app_ctx )
+        FATAL ( "%s\n", "Error allocate context worker" );
+
+      getcontext ( worker_app_ctx );
+      worker_app_ctx->uc_link = &main_ctx;
+      makecontext ( worker_app_ctx,
+                    ( void ( * ) ( void ) ) wrapper_app,
+                    2,
+                    msb,
+                    lsb );
+
+      /* main_ctx is never modified, always worker_app_ctx return this come to
+       * go to bellow swapcontext function.
+       * Go to app context */
+      swaps++;
+      swapcontext ( &main_ctx, worker_app_ctx );
+
+      /* swapt between context without work to long request context */
+      if ( tmp_long_ctx )
+        {
+          context_free ( worker_app_ctx );
+          worker_app_ctx = tmp_long_ctx;
+          tmp_long_ctx = NULL;
+
+          /* update return address */
+          // context_setlink ( worker_app_ctx, &main_ctx );
+
+          DEBUG ( "Going to long ctx: %p\n", worker_app_ctx );
+
+          /* known long request, rearming alarm with delay to compensate
+           * the delay until get app code */
+          timer_set_delay ( worker_id, 20 );
+
+          afp_setcontext ( worker_app_ctx );
+        }
+
+      if ( app_return )
+        {
+          app_return = false;
+          context_free ( worker_app_ctx );
+        }
+    }
 }
 
 static int
@@ -164,53 +221,7 @@ worker ( void *arg )
 
   afp_netio_init_per_worker ();
 
-  // TODO
-  void *ctxp = NULL;
-  uint32_t msb = ( ( uintptr_t ) ctxp >> 32 );
-  uint32_t lsb = ( uint32_t ) ( uintptr_t ) ctxp;
-
-  // context management
-  while ( 1 )
-    {
-      DEBUG ( "Creating context on worker %u\n", worker_id );
-
-      worker_app_ctx = context_alloc ();
-      if ( !worker_app_ctx )
-        FATAL ( "%s\n", "Error allocate context worker" );
-
-      getcontext ( worker_app_ctx );
-      worker_app_ctx->uc_link = &main_ctx;
-      makecontext ( worker_app_ctx,
-                    ( void ( * ) ( void ) ) wrapper_app,
-                    2,
-                    msb,
-                    lsb );
-
-      // context_setlink ( worker_app_ctx, &main_ctx );
-
-      // go to app context
-      swapcontext ( &main_ctx, worker_app_ctx );
-
-      // swapt between context without work to long request context
-      if ( tmp_long_ctx )
-        {
-          swaps++;
-          context_free ( worker_app_ctx );
-          worker_app_ctx = tmp_long_ctx;
-          tmp_long_ctx = NULL;
-
-          // update return address
-          // context_setlink ( worker_app_ctx, &main_ctx );
-
-          DEBUG ( "Going to long ctx: %p\n", worker_app_ctx );
-
-          /* known long request, rearming alarm with delay to compensate
-           * the delay until get app code */
-          timer_set_delay ( worker_id, 20 );
-
-          afp_setcontext ( worker_app_ctx );
-        }
-    }
+  main_mgnt_ctx ();
 
   return 0;
 }
