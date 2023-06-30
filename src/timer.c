@@ -12,7 +12,7 @@
 #include "debug.h"
 #include "afp_internal.h"
 
-#define QUANTUM 10  // in us
+#define QUANTUM 20  // in us
 
 static uint64_t workers_alarm[MAX_WORKERS];
 
@@ -137,10 +137,10 @@ timer_main ( uint16_t tot_workers )
       if ( min_deadline == UINT64_MAX )
         continue;
 
-      min_deadline = UINT64_MAX;
-
       /* wait next shot */
       while ( ( now = rte_get_tsc_cycles () ) < min_deadline )
         cpu_relax ();
+
+      min_deadline = UINT64_MAX;
     }
 }
