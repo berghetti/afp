@@ -33,9 +33,6 @@ https://github.com/stanford-mast/shinjuku/blob/master/dp/core/context_fast.S
 .type afp_setcontext, @function
 
 afp_setcontext:
-  /* disable interruptions */
-  cli
-
   /* Load the new stack pointer, the preserved registers and
      registers used for passing args.  */
   movq oRSP(%rdi), %rsp
@@ -68,9 +65,6 @@ afp_setcontext:
 
   /* Clear rax to indicate success.  */
   xorl %eax, %eax
-
-  /* enable interruptions */
-  sti
 
   ret
 
