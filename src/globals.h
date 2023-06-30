@@ -20,7 +20,8 @@ extern __thread uint16_t hwq;
 
 extern __thread rte_atomic16_t in_long_request;
 
+/* defined in stats.c */
 extern uint64_t swaps, interruptions, int_no_swaps, invalid_interruptions,
-        yields;
+        yields, stealing;
 
 #endif

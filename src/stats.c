@@ -6,20 +6,25 @@
 #include "debug.h"
 #include "globals.h"
 
+uint64_t swaps, interruptions, int_no_swaps, invalid_interruptions, yields,
+        stealing;
+
 static void
 statistics ( int __notused sig )
 {
   INFO ( "Statistics:\n"
          "  Interruptions:         %lu\n"
-         "  Context swaps:        %lu\n"
+         "  Context swaps:         %lu\n"
          "  Long continue:         %lu\n"
          "  Invalid interruptions: %lu\n"
-         "  yields:                %lu\n",
+         "  Yields:                %lu\n"
+         "  Work stealing:         %lu\n",
          interruptions,
          swaps,
          int_no_swaps,
          invalid_interruptions,
-         yields );
+         yields,
+         stealing );
 
   exit ( 0 );
 }

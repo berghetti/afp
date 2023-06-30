@@ -168,6 +168,7 @@ afp_recv ( void **data, uint16_t *len, struct sock *s )
 
           if ( work_stealing ( rxq, &rxqs[remote_worker] ) )
             {
+              stealing++;
               DEBUG ( "Worker %u stealead %u packtes from worker %u\n",
                       worker_id,
                       queue_count ( rxq ),

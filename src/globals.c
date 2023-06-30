@@ -15,6 +15,3 @@ __thread uint16_t worker_id;
 __thread uint16_t hwq;
 
 __thread rte_atomic16_t in_long_request = RTE_ATOMIC16_INIT ( 0 );
-
-/* statistics */
-uint64_t swaps, interruptions, int_no_swaps, invalid_interruptions, yields;
