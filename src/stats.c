@@ -11,7 +11,7 @@ statistics ( int __notused sig )
 {
   INFO ( "Statistics:\n"
          "  Interruptions:         %lu\n"
-         "  Context swapts:        %lu\n"
+         "  Context swaps:        %lu\n"
          "  Long continue:         %lu\n"
          "  Invalid interruptions: %lu\n"
          "  yields:                %lu\n",
