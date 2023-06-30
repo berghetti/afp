@@ -12,7 +12,7 @@
 #include "debug.h"
 #include "afp_internal.h"
 
-#define QUANTUM 20  // in us
+#define QUANTUM 10  // in us
 
 static uint64_t workers_alarm[MAX_WORKERS];
 
@@ -101,10 +101,9 @@ timer_main ( uint16_t tot_workers )
   uint64_t deadline, min_deadline, now;
 
   now = rte_get_tsc_cycles ();
+  min_deadline = UINT64_MAX;
   while ( 1 )
     {
-      min_deadline = UINT64_MAX;
-
       for ( uint16_t i = 0; i < tot_workers; i++ )
         {
           /* worker may be disabling timer */
@@ -137,6 +136,8 @@ timer_main ( uint16_t tot_workers )
       /* all timers disabled */
       if ( min_deadline == UINT64_MAX )
         continue;
+
+      min_deadline = UINT64_MAX;
 
       /* wait next shot */
       while ( ( now = rte_get_tsc_cycles () ) < min_deadline )
