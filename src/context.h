@@ -1,10 +1,12 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
 
-#include <rte_branch_prediction.h>
-#include <rte_malloc.h>
+#include <stdint.h>
 #include <sys/ucontext.h>
 #include <ucontext.h>
+
+#include <rte_branch_prediction.h>
+#include <rte_malloc.h>
 
 /* app stack size */
 #define STACK_SIZE 16 * 1024
@@ -41,15 +43,18 @@ context_free ( ucontext_t *u )
   rte_free ( u );
 }
 
-// https://elixir.bootlin.com/glibc/glibc-2.37/source/sysdeps/unix/sysv/linux/x86_64/makecontext.c
-// https://github.com/stanford-mast/shinjuku/blob/master/inc/ix/context.h
+/*
+ * https://github.com/bminor/glibc/blob/master/sysdeps/unix/sysv/linux/x86_64/makecontext.c
+ * https://github.com/stanford-mast/shinjuku/blob/master/inc/ix/context.h
+ */
 static inline void
 context_setlink ( ucontext_t *c, ucontext_t *uc_link )
 {
   uintptr_t *sp;
 
   /* Set up the sp pointer so that we save uc_link in the correct address. */
-  sp = ( ( uintptr_t * ) c->uc_stack.ss_sp + c->uc_stack.ss_size );
+  sp = ( uintptr_t * ) ( ( uintptr_t ) c->uc_stack.ss_sp +
+                         c->uc_stack.ss_size );
   sp -= 1;
 
   /* We assume that we have less than 6 arguments here.
