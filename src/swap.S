@@ -1,4 +1,11 @@
 
+/* taken from glibc and shinjuku and modified to afp use.
+
+https://github.com/bminor/glibc/blob/glibc-2.37/sysdeps/unix/sysv/linux/x86_64/setcontext.S
+https://github.com/stanford-mast/shinjuku/blob/master/dp/core/context_fast.S
+*/
+
+
 .file "swap.S"
 
 #define oRBX		0x80
@@ -26,44 +33,44 @@
 .type afp_setcontext, @function
 
 afp_setcontext:
-    /* disable interruptions */
-    cli
+  /* disable interruptions */
+  cli
 
-    /* Load the new stack pointer, the preserved registers and
-	   registers used for passing args.  */
-	movq	oRSP(%rdi), %rsp
-	movq	oRBX(%rdi), %rbx
-	movq	oRBP(%rdi), %rbp
-	movq	oR12(%rdi), %r12
-	movq	oR13(%rdi), %r13
-	movq	oR14(%rdi), %r14
-	movq	oR15(%rdi), %r15
+  /* Load the new stack pointer, the preserved registers and
+     registers used for passing args.  */
+  movq oRSP(%rdi), %rsp
+  movq oRBX(%rdi), %rbx
+  movq oRBP(%rdi), %rbp
+  movq oR12(%rdi), %r12
+  movq oR13(%rdi), %r13
+  movq oR14(%rdi), %r14
+  movq oR15(%rdi), %r15
 
-    /* Restore the floating-point context.  Not the registers, only the
-	   rest.  */
-    //movq	oFPREGS(%rdi), %rcx
-	//fldenv	(%rcx)
-	//ldmxcsr oMXCSR(%rdi)
+  /* Restore the floating-point context.  Not the registers, only the
+     rest.  */
+  //movq	oFPREGS(%rdi), %rcx
+  //fldenv	(%rcx)
+  //ldmxcsr oMXCSR(%rdi)
 
-    /* The following ret should return to the address set with
-	   getcontext.  Therefore push the address on the stack.  */
-	movq	oRIP(%rdi), %rcx
-	pushq	%rcx
+  /* The following ret should return to the address set with
+     getcontext.  Therefore push the address on the stack.  */
+  movq oRIP(%rdi), %rcx
+  pushq	%rcx
 
-	movq	oRSI(%rdi), %rsi
-	movq	oRDI(%rdi), %rdi
-	movq	oRCX(%rdi), %rcx
-	movq	oR8(%rdi), %r8
-	movq	oR9(%rdi), %r9
+  movq oRSI(%rdi), %rsi
+  movq oRDI(%rdi), %rdi
+  movq oRCX(%rdi), %rcx
+  movq oR8(%rdi), %r8
+  movq oR9(%rdi), %r9
 
-	/* Setup finally %rdx.  */
-	movq	oRDX(%rdi), %rdx
+  /* Setup finally %rdx.  */
+  movq oRDX(%rdi), %rdx
 
-	/* Clear rax to indicate success.  */
-	xorl	%eax, %eax
+  /* Clear rax to indicate success.  */
+  xorl %eax, %eax
 
-    /* enable interruptions */
-    sti
+  /* enable interruptions */
+  sti
 
-	ret
+  ret
 
