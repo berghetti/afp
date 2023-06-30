@@ -10,15 +10,20 @@ PWD := $(CURDIR)
 all:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 
+CFLAGS += -O2
+
 tests: test_kmod_ipi test_kmod_hrtimer
 
-test_kmod_ipi: test_kmod_ipi.o trap.o
+test_kmod_ipi: test_kmod_ipi.o trap.o trap_lib.o
 	$(CC) $(CFLAGS) -o $@ $^ -pthread -O2 -Wall -Wextra
 
 test_kmod_hrtimer: test_kmod_hrtimer.o trap.o
 	$(CC) $(CFLAGS) -o $@ $^ -pthread -O2 -Wall -Wextra
 
 trap.o: trap.S
+	$(CC) $(CFLAGS) -c $^ -o $@
+
+trap_lib.o: trap_lib.c
 	$(CC) $(CFLAGS) -c $^ -o $@
 
 clean:

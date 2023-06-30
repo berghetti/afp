@@ -91,7 +91,7 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 }
 
 // signal, dune or ipi module interrupt
-void
+static void
 interrupt_handler ( int __notused sig )
 {
   interruptions++;

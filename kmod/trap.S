@@ -75,8 +75,8 @@ _trap_entry:
   movq %r10, R10(%rsp)
   movq %r11, R11(%rsp)
 
-  /* call we interrupt handler */
-  call interrupt_handler
+  /* call we high level interrupt handler */
+  call trap
 
   /* restore callee-clobbered registers */
   movq RDI(%rsp), %rdi

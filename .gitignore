@@ -19,8 +19,8 @@ tests/*
 
 kmod/*
 kmod/*.mod*
-#!kmod/*.c
-#!kmod/*.h
-#!kmod/*.sh
+!kmod/*.c
+!kmod/*.h
+!kmod/*.sh
 #!kmod/Makefile
 

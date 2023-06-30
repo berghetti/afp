@@ -6,18 +6,16 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 
-#include "kmod_ipi.h"
 #include "trap.h"
 
 static volatile int worker_ready = 0, worker_stop = 2;
 
-void
-interrupt_handler ( void )
+static void
+my_handler ( void )
 {
   // clang-format off
   asm volatile( "mov $3, %%rax;"
@@ -99,6 +97,8 @@ main ( void )
       return 1;
     }
 
+  trap_init ( my_handler );
+
   CPU_ZERO ( &cpus );
   CPU_SET ( 1, &cpus );
   pthread_t tid;
@@ -107,28 +107,21 @@ main ( void )
   pthread_attr_setaffinity_np ( &attr, sizeof ( cpu_set_t ), &cpus );
   pthread_create ( &tid, &attr, worker, NULL );
 
-  int fd = open ( KMOD_IPI_PATH, O_RDWR );
-  if ( fd < 0 )
-    {
-      perror ( "Error to open character " KMOD_IPI_PATH );
-      return 1;
-    }
-
   while ( !worker_ready )
     ;
 
-  printf ( "%p\n", _trap_entry );
+  // printf ( "%p\n", _trap_entry );
 
-  struct req_ipi req = { .core = 1, ._trap_entry = _trap_entry };
+  trap_send_interrupt ( 1 );
 
-  int r = ioctl ( fd, KMOD_IPI_SEND, &req );
-  if ( r < 0 )
-    {
-      perror ( "Error to send ioctl " KMOD_IPI_PATH );
-      return 1;
-    }
+  // struct req_ipi req = { .core = 1, ._trap_entry = _trap_entry };
 
-  close ( fd );
+  // int r = ioctl ( fd, KMOD_IPI_SEND, &req );
+  // if ( r < 0 )
+  //  {
+  //    perror ( "Error to send ioctl " KMOD_IPI_PATH );
+  //    return 1;
+  //  }
 
   pthread_join ( tid, NULL );
 
