@@ -57,9 +57,6 @@ RSP		 stack pointer
 .globl _trap_entry
 .type _trap_entry, @function
 _trap_entry:
-  pushq %rbp
-  movq %rsp, %rbp
-
   /* save flag register.
      save low 16 bits from flags register on stack */
   pushf
@@ -81,10 +78,6 @@ _trap_entry:
   /* call we interrupt handler */
   call interrupt_handler
 
-  /* load flags values from stack, save by pushf, to AH register.
-     away from instruction sahf to remove data depedency. */
-  mov FLAGS(%rsp), %ah
-
   /* restore callee-clobbered registers */
   movq RDI(%rsp), %rdi
   movq RSI(%rsp), %rsi
@@ -94,19 +87,13 @@ _trap_entry:
   movq R9(%rsp), %r9
   movq R10(%rsp), %r10
   movq R11(%rsp), %r11
-
-  /* restore flag register.
-     load AH to flags register. save only SF, ZF, AF, PF, and CF flags.
-     Could using popf, but popf is look more slow
-     (https://www.agner.org/optimize/instruction_tables.pdf).*/
-  sahf
-
-  /* finally restore rax */
   movq RAX(%rsp), %rax
 
-  /* using leave to release stack frame because leave not affect flags register
-     as "addq $RESERVE+8, %rsp" */
-  leave
+  /* release stack */
+  addq $RESERVE, %rsp
+
+  /* restore flags */
+  popf
 
   /* in kernel module we put return address to thread app on stack */
   ret
