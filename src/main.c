@@ -44,7 +44,7 @@ psp_server ( void )
 
   struct sock sock;
 
-  uint32_t id, type, nloop;
+  uint32_t id, type, ns_sleep;
   while ( 1 )
     {
       if ( !afp_recv ( &data, &len, &sock ) )
@@ -54,20 +54,20 @@ psp_server ( void )
 
       p = data;
       id = *( uint32_t * ) p;
+      id = id;
 
       p += sizeof ( uint32_t );
       type = *( uint32_t * ) p;
 
       p += sizeof ( uint32_t ) * 2;
-      nloop = *( uint32_t * ) p * 2.2f;
+      ns_sleep = *( uint32_t * ) p;
 
-      // INFO ( "ID: %u TYPE: %u NLOOP: %u\n", id, type, nloop );
+      // INFO ( "ID: %u TYPE: %u SLEEP: %u\n", id, type, ns_sleep );
 
       if ( type == LONG )
         afp_send_feedback ( START_LONG );
 
-      for ( unsigned i = 0; i < nloop; i++ )
-        asm volatile( "nop" );
+      sleep_us ( ns_sleep / 1000U );
 
       if ( type == LONG )
         afp_send_feedback ( FINISHED_LONG );

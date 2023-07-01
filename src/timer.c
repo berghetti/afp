@@ -19,8 +19,22 @@ static uint64_t workers_alarm[MAX_WORKERS];
 static rte_spinlock_t workers_lock[MAX_WORKERS];
 
 static uint32_t tsc_freq_us;
-
 static uint64_t tsc_quantum;
+
+static inline void
+cpu_relax ( void )
+{
+  asm volatile( "pause" );
+}
+
+void
+sleep_us ( uint32_t us )
+{
+  uint64_t wait = rte_get_tsc_cycles () + us * tsc_freq_us;
+
+  while ( rte_get_tsc_cycles () < wait )
+    cpu_relax ();
+}
 
 /* if not taken lock, this was called from interrupt handler
  * and main line is in timer_disable, or 'timer_main' core is sending
@@ -78,12 +92,6 @@ timer_init ( uint16_t tot_workers )
       workers_alarm[i] = UINT64_MAX;
       rte_spinlock_unlock ( &workers_lock[i] );
     }
-}
-
-static inline void
-cpu_relax ( void )
-{
-  asm volatile( "pause" );
 }
 
 void

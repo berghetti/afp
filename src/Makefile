@@ -18,7 +18,6 @@ ifneq ($(shell $(PKGCONF) --exists libdpdk && echo 0),0)
 $(error "no installation of DPDK found")
 endif
 
-#CFLAGS += -O3 -Wall -Wextra -DNDEBUG
 CFLAGS += -O3 -ggdb -Wall -Wextra
 CFLAGS += -DNDEBUG
 CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)

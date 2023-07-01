@@ -1,4 +1,8 @@
 
+/* network management */
+
+#include <assert.h>
+
 #include <rte_ethdev.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
@@ -130,11 +134,20 @@ has_work_in_queues ( struct queue *rxq, uint16_t hwq )
   return ( free != QUEUE_SIZE - 1 );
 }
 
+/* return true if we have work in our queues */
 bool
 afp_netio_has_work ( void )
 {
   struct queue *rxq = &rxqs[worker_id];
-  return has_work_in_queues ( rxq, hwq );
+
+  if ( !queue_is_empty ( rxq ) )
+    return true;
+
+  int hw_queue_count = rte_eth_rx_queue_count ( port_id, hwq );
+
+  assert ( hw_queue_count >= 0 );
+
+  return ( bool ) hw_queue_count;
 }
 
 size_t

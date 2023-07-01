@@ -4,6 +4,10 @@
 
 #include <stdint.h>
 
+/* busy wait sleep */
+void
+sleep_us ( uint32_t us );
+
 /* may not activate the timer, see timer.c */
 void
 timer_tryset ( uint16_t worker_id );
