@@ -98,7 +98,7 @@ interrupt_handler ( int __notused sig )
 
   DEBUG ( "Worker %u received interrupt\n", worker_id );
 
-  /* invalid interrupt are when long request is finished but we yet receve a
+  /* invalid interrupt are when long request is finished but we yet receive a
    * interrupt. This could be a interrupt on bus */
   if ( rte_atomic16_read ( &in_long_request ) == 0 )
     {
