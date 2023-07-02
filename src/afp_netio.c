@@ -120,6 +120,7 @@ has_work_in_queues ( struct queue *rxq, uint16_t hwq )
   // try keep app queue (rxq) full to improve work stealing
   if ( free >= BURST_SIZE )
     {
+
       nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
       if ( nb_rx )
         {
@@ -153,6 +154,7 @@ afp_netio_has_work ( void )
 size_t
 afp_recv ( void **data, uint16_t *len, struct sock *s )
 {
+  // timer_wait_disabled_state ( worker_id );
   // DEBUG ( "Worker: %u\n", ctx->worker_id );
   struct rte_mbuf *pkt;
   struct queue *rxq = &rxqs[worker_id];

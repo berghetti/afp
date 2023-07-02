@@ -45,9 +45,9 @@ afp_setcontext:
 
   /* Restore the floating-point context.  Not the registers, only the
      rest.  */
-  //movq	oFPREGS(%rdi), %rcx
-  //fldenv	(%rcx)
-  //ldmxcsr oMXCSR(%rdi)
+  movq	oFPREGS(%rdi), %rcx
+  fldenv	(%rcx)
+  ldmxcsr oMXCSR(%rdi)
 
   /* The following ret should return to the address set with
      getcontext.  Therefore push the address on the stack.  */

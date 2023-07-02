@@ -23,6 +23,9 @@ timer_set_delay ( uint16_t worker_id, uint32_t delay );
 void
 timer_disable ( uint16_t worker_id );
 
+void
+timer_wait_disabled_state ( uint16_t worker_id );
+
 /* main function to 'timer core'*/
 void
 timer_main ( uint16_t tot_workers );

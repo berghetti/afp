@@ -1,5 +1,7 @@
 
+#include <generic/rte_cycles.h>
 #include <stdbool.h>
+#include <stdio.h>
 #define _GNU_SOURCE  // gettid
 
 #include <sys/ucontext.h>
@@ -44,37 +46,49 @@ psp_server ( void )
 
   struct sock sock;
 
+  static int i = 0;
+
+  // fprintf ( stderr, "New thread %u\n", ++i );
+
   uint32_t id, type, ns_sleep;
   while ( 1 )
-    {
-      if ( !afp_recv ( &data, &len, &sock ) )
-        continue;
+    //  {
+    if ( !afp_recv ( &data, &len, &sock ) )
+      continue;
+    else
+      break;
 
-      // INFO ( "Reveived len %u\n", len );
+  // INFO ( "Reveived len %u\n", len );
 
-      p = data;
-      id = *( uint32_t * ) p;
-      id = id;
+  p = data;
+  id = *( uint32_t * ) p;
+  id = id;
 
-      p += sizeof ( uint32_t );
-      type = *( uint32_t * ) p;
+  p += sizeof ( uint32_t );
+  type = *( uint32_t * ) p;
 
-      p += sizeof ( uint32_t ) * 2;
-      ns_sleep = *( uint32_t * ) p;
+  p += sizeof ( uint32_t ) * 2;
+  ns_sleep = *( uint32_t * ) p;
 
-      // INFO ( "ID: %u TYPE: %u SLEEP: %u\n", id, type, ns_sleep );
+  // INFO ( "ID: %u TYPE: %u SLEEP: %u\n", id, type, ns_sleep );
+  // asm volatile( "sti" ::: );
+  if ( type == LONG )
+    afp_send_feedback ( START_LONG );
 
-      if ( type == LONG )
-        afp_send_feedback ( START_LONG );
+  uint64_t wait = rte_get_tsc_cycles () + ns_sleep / 1000U * 2194;
+  while ( rte_get_tsc_cycles () < wait )
+    ;  // fprintf ( stderr, "thread %u in loop\n", i );
+  // sleep_us ( ns_sleep / 1000U );
+  // rte_delay_us_block ( ns_sleep / 1000U );
 
-      sleep_us ( ns_sleep / 1000U );
+  if ( type == LONG )
+    afp_send_feedback ( FINISHED_LONG );
 
-      if ( type == LONG )
-        afp_send_feedback ( FINISHED_LONG );
+  // asm volatile( "cli" ::: );
 
-      if ( !afp_send ( data, len, &sock ) )
-        FATAL ( "%s\n", "Error to send packet" );
-    }
+  if ( !afp_send ( data, len, &sock ) )
+    FATAL ( "%s\n", "Error to send packet" );
+  //}
 }
 
 static void
@@ -92,7 +106,7 @@ wrapper_app ( uint32_t msb_afp, uint32_t lsb_afp )
 
 // signal, dune or ipi module interrupt
 static void
-interrupt_handler ( int __notused sig )
+interrupt_handler ()
 {
   interruptions++;
 
@@ -182,9 +196,17 @@ main_mgnt_ctx ( void )
 
           /* known long request, rearming alarm with delay to compensate
            * the delay until get app code */
-          timer_set_delay ( worker_id, 20 );
+          // INFO ( "%lu: worker %u starting timer from main\n",
+          //       rte_get_tsc_cycles (),
+          //       worker_id );
+          // timer_set_delay ( worker_id, 200 );
+          timer_set ( worker_id );
+          // INFO ( "%lu: worker %u finished timer set from main\n",
+          //       rte_get_tsc_cycles (),
+          //       worker_id );
 
           afp_setcontext ( worker_app_ctx );
+          // swapcontext ( &main_ctx, worker_app_ctx );
         }
 
       if ( app_return )
