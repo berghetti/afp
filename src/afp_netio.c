@@ -20,7 +20,6 @@
 #include "timer.h"
 
 static uint16_t port_id;
-// static struct rte_mempool *pkt_pool;
 static struct rte_ether_addr my_ether;
 
 // app queues
@@ -90,6 +89,8 @@ parse_pkt ( struct rte_mbuf *pkt, void **payload, uint16_t *payload_size )
  */
 #define div_up( x, d ) ( ( ( ( x ) + ( d ) -1 ) ) / ( d ) )
 
+#ifndef NOWORKSTEALING
+
 // return amount work stolen
 static uint32_t
 work_stealing ( struct queue *my, struct queue *remote )
@@ -109,6 +110,8 @@ work_stealing ( struct queue *my, struct queue *remote )
   return size;
 }
 
+#endif
+
 // return true if has work on queue
 static bool
 has_work_in_queues ( struct queue *rxq, uint16_t hwq )
@@ -124,7 +127,7 @@ has_work_in_queues ( struct queue *rxq, uint16_t hwq )
       nb_rx = rte_eth_rx_burst ( port_id, hwq, pkts, BURST_SIZE );
       if ( nb_rx )
         {
-          DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
+          // DEBUG ( "Queue %u received %u packets\n", hwq, nb_rx );
           if ( !queue_enqueue_bulk ( rxq, ( void ** ) pkts, nb_rx ) )
             FATAL ( "%s\n", "Error enqueue bulk" );
 
@@ -147,6 +150,9 @@ afp_netio_has_work ( void )
   int hw_queue_count = rte_eth_rx_queue_count ( port_id, hwq );
 
   assert ( hw_queue_count >= 0 );
+
+  /* not count current request in processing */
+  hw_queue_count -= ( hw_queue_count == 1 );
 
   return ( bool ) hw_queue_count;
 }
@@ -173,6 +179,7 @@ afp_recv ( void **data, uint16_t *len, struct sock *s )
           exit_to_context ( long_ctx );
         }
 
+#ifndef NOWORKSTEALING
       static __thread uint16_t remote_worker = 0;
       for ( uint16_t i = 0; i < tot_workers; i++ )
         {
@@ -191,6 +198,7 @@ afp_recv ( void **data, uint16_t *len, struct sock *s )
               goto done;
             }
         }
+#endif
     }
 
 done:

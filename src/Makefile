@@ -20,6 +20,9 @@ endif
 
 CFLAGS += -O3 -ggdb -Wall -Wextra
 CFLAGS += -DNDEBUG
+#CFLAGS += -DSIGNAL
+#CFLAGS += -DNOWORKSTEALING
+#CFLAGS += -flto
 CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
 LDLIBS = $(shell $(PKGCONF) --libs --static libdpdk)
 
