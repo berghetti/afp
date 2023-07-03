@@ -19,8 +19,6 @@ static rte_spinlock_t workers_lock[MAX_WORKERS] __aligned ( CACHE_LINE_SIZE );
 
 static uint64_t workers_alarms[MAX_WORKERS] __aligned ( CACHE_LINE_SIZE );
 
-static volatile bool timer_active;
-
 static uint64_t tsc_freq_us;
 static uint64_t tsc_quantum;
 
@@ -50,7 +48,6 @@ timer_tryset ( uint16_t worker_id )
 
   workers_alarms[worker_id] = rte_get_tsc_cycles () + tsc_quantum;
   rte_spinlock_unlock ( &workers_lock[worker_id] );
-  timer_active = true;
 
   DEBUG ( "set alarm to worker %u from tryset\n", worker_id );
 }
@@ -64,7 +61,6 @@ timer_set ( uint16_t worker_id )
   workers_alarms[worker_id] = rte_get_tsc_cycles () + tsc_quantum;
 
   rte_spinlock_unlock ( &workers_lock[worker_id] );
-  timer_active = true;
 
   DEBUG ( "set alarm to worker %u\n", worker_id );
 }
@@ -79,7 +75,6 @@ timer_set_delay ( uint16_t worker_id, uint32_t us_delay )
   workers_alarms[worker_id] = rte_get_tsc_cycles () + us_delay * tsc_freq_us;
 
   rte_spinlock_unlock ( &workers_lock[worker_id] );
-  timer_active = true;
 }
 
 /* ensure timer is disabled */
@@ -157,15 +152,7 @@ timer_main ( uint16_t tot_workers )
 
       /* all timers disabled */
       if ( min_deadline == UINT64_MAX )
-        {
-          timer_active = false;
-          uint64_t wait = rte_get_tsc_cycles () + 1U * tsc_freq_us;
-
-          while ( !timer_active && rte_get_tsc_cycles () < wait )
-            cpu_relax ();
-
-          continue;
-        }
+        continue;
 
       /* some alarm active, wait next shot */
       while ( rte_get_tsc_cycles () < min_deadline )
