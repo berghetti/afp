@@ -24,7 +24,7 @@ submodules: dpdk rocksdb
 submodules-clean: rocksdb-clean
 
 dpdk:
-	./deps/install_dpdk.sh
+	./scripts/install_dpdk.sh
 
 dpdk-clean:
 
