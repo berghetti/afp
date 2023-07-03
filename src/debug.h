@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <rte_cycles.h>
+
 #define ANSI_COLOR
 
 #ifdef ANSI_COLOR
@@ -67,11 +69,15 @@ print ( const char *, ... );
 #define DEBUG( fmt, ... )
 #define DEBUG_ARRAY( a, size )
 #else
-#define DEBUG( fmt, ... )                                               \
-  do                                                                    \
-    {                                                                   \
-      print ( _DEBUG "%s:%d - " fmt, __FILE__, __LINE__, __VA_ARGS__ ); \
-    }                                                                   \
+#define DEBUG( fmt, ... )                \
+  do                                     \
+    {                                    \
+      print ( _DEBUG "%s:%d - %lu:" fmt, \
+              __FILE__,                  \
+              __LINE__,                  \
+              rte_get_tsc_cycles (),     \
+              __VA_ARGS__ );             \
+    }                                    \
   while ( 0 )
 
 #define DEBUG_ARRAY( a, size )                   \
