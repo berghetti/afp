@@ -13,11 +13,10 @@
 
 #include "util.h"
 #include "trap.h"
-#include "kmod_ipi.h"
 
 // ensure not using hyperthreads of same core
-#define SENDER_CORE 7
-#define WORKER_CORE 0
+#define SENDER_CORE 6
+#define WORKER_CORE 7
 
 #define RUNS 100000UL
 
@@ -63,20 +62,19 @@ worker ( void *arg )
 }
 
 static void
-sender ( int fd )
+sender ( void )
 {
   pin_to_cpu ( SENDER_CORE );
   printf ( "Started sender thread on core %u\n", sched_getcpu () );
 
   uint64_t now;
-  struct req_ipi req = { .core = WORKER_CORE, ._trap_entry = _trap_entry };
 
   for ( unsigned int i = 0; i < RUNS; i++ )
     {
       now = __rdtsc ();
       sender_start_tsc = now;
 
-      ioctl ( fd, KMOD_IPI_SEND, &req );
+      trap_send_interrupt ( WORKER_CORE );
 
       tsc_sender[i] = __rdtsc () - now;
 
@@ -104,12 +102,8 @@ main ( int argc, char **argv )
            RUNS,
            cycles_by_us );
 
-  int fd = open ( KMOD_IPI_PATH, O_RDWR );
-  if ( fd < 0 )
-    {
-      perror ( "Error to open character " KMOD_IPI_PATH );
-      return 1;
-    }
+  if ( trap_init ( jmp_for_me ) < 0 )
+    return 1;
 
   pthread_t tid;
   pthread_create ( &tid, NULL, worker, NULL );
@@ -117,9 +111,9 @@ main ( int argc, char **argv )
   while ( !worker_ready )
     ;
 
-  sender ( fd );
-  close ( fd );
+  sender ();
   pthread_join ( tid, NULL );
+  trap_free ();
 
   printf ( "\nIPIs handled: %d\n", i_handler );
   return 0;

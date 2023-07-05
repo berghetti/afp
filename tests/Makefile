@@ -29,7 +29,7 @@ ALL: $(PROGS)
 rocksdb: rocksdb.o
 	$(CXX) $^ -o $@ $(ROCKS_LDLIBS) $(CFLAGS)
 
-ipi_core: ipi_core.o trap.o
+ipi_core: ipi_core.o trap.o ../kmod/trap_lib.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 ipi_multthread: ipi_multthread.o trap.o
@@ -39,7 +39,7 @@ hrtimer: hrtimer.o trap.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 dune_core: dune_core.o
-	$(CC) $^ -o $@ $(CFLAGS) $(DUNE_LDLIBS) $(DUNE_LDLIBS) -pthread
+	$(CC) $^ -o $@ $(CFLAGS) $(DUNE_LDLIBS) -pthread
 
 trap.o: ../kmod/trap.S
 	$(CC) -c $^ -o $@

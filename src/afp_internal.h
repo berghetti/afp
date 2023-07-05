@@ -5,11 +5,11 @@
 
 #include <rte_ether.h>
 
-#define MAX_WORKERS 32
+#define MAX_WORKERS 16
 
 #define WAIT_QUEUE_SIZE 128 * 1024U  // long requests queue
 
-#define BURST_SIZE 32                  // DPDK burst
+#define BURST_SIZE 8                   // DPDK burst
 #define QUEUE_SIZE ( BURST_SIZE * 4 )  // worker queue size (real size is -1)
 
 struct config

@@ -24,7 +24,7 @@
 
 #include "util.h"
 
-#define SENDER_CORE 5
+#define SENDER_CORE 6
 #define WORKER_CORE 7
 
 #define RUNS 100000UL
