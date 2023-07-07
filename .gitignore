@@ -12,6 +12,7 @@ database/*
 !datakmod/Makefile
 
 tests/*
+!tests/**/
 !tests/*.c
 !tests/*.h
 !tests/*.sh
