@@ -21,12 +21,13 @@ database-clean:
 
 submodules: dpdk rocksdb
 
-submodules-clean: rocksdb-clean
+submodules-clean: dpdk-clean rocksdb-clean
 
 dpdk:
 	./scripts/install_dpdk.sh
 
 dpdk-clean:
+	./scripts/install_dpdk.sh clean
 
 rocksdb:
 	$(MAKE) -j $(shell nproc) -C ./deps/rocksdb static_lib
