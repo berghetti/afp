@@ -15,7 +15,7 @@ pushd $ROOT_PATH
 git checkout v23.03
 
 meson build
-meson configure -Dprefix=$ROOT_PATH/build
+meson configure -Dprefix=$PWD/build build
 ninja -C build
 sudo ninja -C build install
 sudo ldconfig

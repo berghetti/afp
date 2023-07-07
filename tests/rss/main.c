@@ -23,6 +23,9 @@
 
 #include "dpdk.h"
 
+extern void
+stats_init ( void );
+
 #define PORT_ID 0
 
 #define SWAP( a, b )           \
@@ -130,6 +133,8 @@ main ( int argc, char **argv )
   /* >8 End of initialization of Environment Abstraction Layer */
 
   dpdk_init ( PORT_ID, rte_lcore_count () );
+
+  stats_init ();
 
   rte_eth_macaddr_get ( PORT_ID, &my_ether );
 
