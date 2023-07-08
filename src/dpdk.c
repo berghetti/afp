@@ -69,8 +69,8 @@ port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
     }
 
   struct rte_eth_txconf *txconf = &dev_info.default_txconf;
-  txconf->tx_rs_thresh = 64;
-  txconf->tx_free_thresh = 64;
+  // txconf->tx_rs_thresh = 64;
+  // txconf->tx_free_thresh = 64;
   txconf->offloads =
           RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
 

@@ -100,7 +100,7 @@ queue_enqueue_bulk ( struct queue *restrict q, void **buff, uint32_t size )
 static inline void *
 queue_dequeue ( struct queue *q )
 {
-  if ( queue_is_empty ( q ) )
+  if ( unlikely ( queue_is_empty ( q ) ) )
     return NULL;
 
   return q->data[q->tail++ & MASK];

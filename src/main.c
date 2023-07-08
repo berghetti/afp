@@ -27,6 +27,7 @@
 #include "feedback.h"
 #include "stats.h"
 #include "swap.h"
+#include "flow.h"
 
 static struct config conf = { .port_id = 0 };
 
@@ -285,6 +286,7 @@ main ( int argc, char **argv )
   wait_queue_init ();
   afp_netio_init ( &conf );
   interrupt_init ( interrupt_handler );
+  flow_init ( conf.port_id, conf.num_queues );
   workers_init ();
   stats_init ();
 
