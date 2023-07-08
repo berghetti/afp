@@ -12,6 +12,7 @@ database/*
 !datakmod/Makefile
 
 tests/*
+tests/*/build/*
 !tests/**/
 !tests/*.c
 !tests/*.h
