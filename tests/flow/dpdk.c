@@ -8,16 +8,14 @@
 #include <sys/types.h>
 
 static const struct rte_eth_conf conf = {
-  .rxmode = { .mq_mode = RTE_ETH_MQ_RX_RSS, /* RTE_ETH_MQ_RX_NONE, /* disable
-                                               rss */
-              .offloads = RTE_ETH_RX_OFFLOAD_IPV4_CKSUM |
-                          RTE_ETH_RX_OFFLOAD_UDP_CKSUM },
-  .rx_adv_conf = { .rss_conf = { .rss_hf = RTE_ETH_RSS_IPV4 |
-                                           RTE_ETH_RSS_NONFRAG_IPV4_UDP } },
-  .txmode = { .offloads = RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
-                          RTE_ETH_TX_OFFLOAD_UDP_CKSUM |
-                          RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE,
-              .mq_mode = RTE_ETH_MQ_TX_NONE },
+  .rxmode = { .mq_mode = /* RTE_ETH_MQ_RX_RSS */ RTE_ETH_MQ_RX_NONE }
+  //            .offloads = RTE_ETH_RX_OFFLOAD_IPV4_CKSUM |
+  //                        RTE_ETH_RX_OFFLOAD_UDP_CKSUM },
+  //.rx_adv_conf = { .rss_conf = { .rss_hf = RTE_ETH_RSS_UDP } },
+  //.txmode = { .offloads = RTE_ETH_TX_OFFLOAD_IPV4_CKSUM |
+  //                        RTE_ETH_TX_OFFLOAD_UDP_CKSUM |
+  //                        RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE,
+  //            .mq_mode = RTE_ETH_MQ_TX_NONE },
 };
 
 #define QUEUE_SIZE 1024
@@ -26,13 +24,10 @@ static const struct rte_eth_conf conf = {
 #define MPOOL_CACHE_SIZE 250
 
 static void
-port_init ( uint16_t port_id,
-            struct rte_mempool *mbuf_pool,
-            uint16_t rxq_count,
-            uint16_t txq_count )
+port_init ( uint16_t port_id, int num_queues, struct rte_mempool *mbuf_pool )
 {
-  uint16_t rx_queues = rxq_count;
-  uint16_t tx_queues = txq_count;
+  uint16_t rx_queues = num_queues;
+  uint16_t tx_queues = num_queues;
 
   int ret;
   ret = rte_eth_dev_configure ( port_id, rx_queues, tx_queues, &conf );
@@ -54,8 +49,8 @@ port_init ( uint16_t port_id,
   /* Allocate and set up QUEUE_COUNT RX/TX queue per Ethernet port. */
 
   struct rte_eth_rxconf *rxconf = &dev_info.default_rxconf;
-  rxconf->offloads =
-          RTE_ETH_RX_OFFLOAD_IPV4_CKSUM | RTE_ETH_RX_OFFLOAD_UDP_CKSUM;
+  // rxconf->offloads =
+  //        RTE_ETH_RX_OFFLOAD_IPV4_CKSUM | RTE_ETH_RX_OFFLOAD_UDP_CKSUM;
   uint16_t q;
   for ( q = 0; q < rx_queues; q++ )
     {
@@ -70,10 +65,10 @@ port_init ( uint16_t port_id,
     }
 
   struct rte_eth_txconf *txconf = &dev_info.default_txconf;
-  // txconf->tx_rs_thresh = 64;
-  // txconf->tx_free_thresh = 64;
-  txconf->offloads =
-          RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+  txconf->tx_rs_thresh = 64;
+  txconf->tx_free_thresh = 64;
+  // txconf->offloads =
+  //        RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
 
   for ( q = 0; q < tx_queues; q++ )
     {
@@ -85,11 +80,6 @@ port_init ( uint16_t port_id,
   ret = rte_eth_dev_start ( port_id );
   if ( ret != 0 )
     rte_exit ( EXIT_FAILURE, "Error start port id 0\n" );
-
-  printf ( "Started port %u: rxq: %u txq: %u\n",
-           port_id,
-           rx_queues,
-           tx_queues );
 
   /* Display the port MAC address. */
   struct rte_ether_addr addr;
@@ -103,7 +93,7 @@ port_init ( uint16_t port_id,
 }
 
 struct rte_mempool *
-dpdk_init ( uint16_t port_id, uint16_t rxq_count, uint16_t txq_count )
+dpdk_init ( uint16_t port_id, uint16_t num_queues )
 {
   struct rte_mempool *mbuf_pool;
 
@@ -120,7 +110,7 @@ dpdk_init ( uint16_t port_id, uint16_t rxq_count, uint16_t txq_count )
                rte_socket_id (),
                rte_strerror ( rte_errno ) );
 
-  port_init ( port_id, mbuf_pool, rxq_count, txq_count );
+  port_init ( port_id, num_queues, mbuf_pool );
 
   return mbuf_pool;
 }
